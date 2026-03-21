@@ -1,0 +1,208 @@
+const express = require("express");
+const router = express.Router();
+const db = require("../database/db");
+
+// Load collectors for search dropdown
+router.get("/collectors", (req, res) => {
+    const sql = "SELECT id, name FROM collectors ORDER BY name ASC";
+
+    db.query(sql, (err, result) => {
+        if (err) {
+            console.log("LOAD COLLECTORS ERROR:", err);
+            return res.status(500).json({
+                message: err.sqlMessage || err.message
+            });
+        }
+
+        res.json(result);
+    });
+});
+
+// Search customers/sales for collection
+router.get("/search", (req, res) => {
+    const { customer_id, collector_id } = req.query;
+
+    let sql = `
+        SELECT
+            sales.id AS sale_id,
+            customers.id AS customer_id,
+            customers.name AS customer_name,
+            customers.address AS customer_address,
+            collectors.name AS collector_name,
+            sales.balance,
+            (
+                SELECT p.amount
+                FROM payments p
+                WHERE p.sale_id = sales.id
+                ORDER BY p.id DESC
+                LIMIT 1
+            ) AS last_payment_amount,
+            (
+                SELECT p.payment_date
+                FROM payments p
+                WHERE p.sale_id = sales.id
+                ORDER BY p.id DESC
+                LIMIT 1
+            ) AS last_payment_date
+        FROM sales
+        INNER JOIN customers ON sales.customer_id = customers.id
+        LEFT JOIN collectors ON customers.collector_id = collectors.id
+        WHERE sales.balance > 0
+    `;
+
+    const params = [];
+
+    if (customer_id) {
+        sql += " AND customers.id = ? ";
+        params.push(customer_id);
+    }
+
+    if (collector_id) {
+        sql += " AND customers.collector_id = ? ";
+        params.push(collector_id);
+    }
+
+    sql += " ORDER BY customers.id ASC, sales.id ASC ";
+
+    db.query(sql, params, (err, result) => {
+        if (err) {
+            console.log("SEARCH COLLECTION ERROR:", err);
+            return res.status(500).json({
+                message: err.sqlMessage || err.message
+            });
+        }
+
+        res.json(result);
+    });
+});
+
+// Save payment and reduce balance
+router.post("/", (req, res) => {
+    const { sale_id, amount, payment_date } = req.body;
+
+    const paymentAmount = Number(amount);
+
+    if (!sale_id || !amount || !payment_date) {
+        return res.status(400).json({
+            message: "Please complete sale, payment amount, and payment date"
+        });
+    }
+
+    if (paymentAmount <= 0) {
+        return res.status(400).json({
+            message: "Payment amount must be greater than 0"
+        });
+    }
+
+    const getSaleSql = "SELECT id, balance FROM sales WHERE id = ?";
+
+    db.query(getSaleSql, [sale_id], (err, saleResult) => {
+        if (err) {
+            console.log("GET SALE ERROR:", err);
+            return res.status(500).json({
+                message: err.sqlMessage || err.message
+            });
+        }
+
+        if (saleResult.length === 0) {
+            return res.status(404).json({
+                message: "Sale not found"
+            });
+        }
+
+        const currentBalance = Number(saleResult[0].balance);
+
+        if (paymentAmount > currentBalance) {
+            return res.status(400).json({
+                message: "Payment amount is greater than remaining balance"
+            });
+        }
+
+        db.beginTransaction((err) => {
+            if (err) {
+                console.log("TRANSACTION ERROR:", err);
+                return res.status(500).json({
+                    message: err.sqlMessage || err.message
+                });
+            }
+
+            const insertPaymentSql = `
+                INSERT INTO payments (sale_id, amount, payment_date, payment_type)
+                VALUES (?, ?, ?, ?)
+            `;
+
+            db.query(
+                insertPaymentSql,
+                [sale_id, paymentAmount, payment_date, "regular"],
+                (err) => {
+                    if (err) {
+                        return db.rollback(() => {
+                            console.log("INSERT PAYMENT ERROR:", err);
+                            res.status(500).json({
+                                message: err.sqlMessage || err.message
+                            });
+                        });
+                    }
+
+                    const updateBalanceSql = `
+                        UPDATE sales
+                        SET balance = balance - ?
+                        WHERE id = ?
+                    `;
+
+                    db.query(updateBalanceSql, [paymentAmount, sale_id], (err) => {
+                        if (err) {
+                            return db.rollback(() => {
+                                console.log("UPDATE BALANCE ERROR:", err);
+                                res.status(500).json({
+                                    message: err.sqlMessage || err.message
+                                });
+                            });
+                        }
+
+                        db.commit((err) => {
+                            if (err) {
+                                return db.rollback(() => {
+                                    console.log("COMMIT ERROR:", err);
+                                    res.status(500).json({
+                                        message: err.sqlMessage || err.message
+                                    });
+                                });
+                            }
+
+                            res.json({
+                                message: "Payment recorded successfully",
+                                new_balance: currentBalance - paymentAmount
+                            });
+                        });
+                    });
+                }
+            );
+        });
+    });
+});
+
+// Optional: full payment history
+router.get("/history/:sale_id", (req, res) => {
+    const saleId = req.params.sale_id;
+
+    const sql = `
+        SELECT id, sale_id, amount, payment_date, payment_type
+        FROM payments
+        WHERE sale_id = ?
+        ORDER BY payment_date DESC, id DESC
+    `;
+
+    db.query(sql, [saleId], (err, result) => {
+        if (err) {
+            console.log("LOAD PAYMENT HISTORY ERROR:", err);
+            return res.status(500).json({
+                message: err.sqlMessage || err.message
+            });
+        }
+
+        res.json(result);
+    });
+});
+
+module.exports = router;

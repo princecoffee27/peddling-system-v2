@@ -1,0 +1,598 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Collector Business Report</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background: #f7f7f7;
+        }
+
+        h1, h2, h3 {
+            margin-bottom: 10px;
+        }
+
+        .card {
+            background: white;
+            border: 1px solid #ddd;
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+
+        .filter-grid {
+            display: grid;
+            grid-template-columns: 1.4fr 1fr 1fr auto;
+            gap: 14px;
+            align-items: end;
+        }
+
+        .summary-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 16px;
+        }
+
+        .summary-box {
+            background: #f8fafc;
+            border: 1px solid #ddd;
+            border-radius: 10px;
+            padding: 16px;
+        }
+
+        .summary-box h3 {
+            margin: 0 0 8px 0;
+            font-size: 16px;
+        }
+
+        .summary-box .value {
+            font-size: 24px;
+            font-weight: bold;
+        }
+
+        .good {
+            color: #15803d;
+        }
+
+        .bad {
+            color: #b91c1c;
+        }
+
+        .neutral {
+            color: #334155;
+        }
+
+        label {
+            display: block;
+            font-weight: bold;
+            margin-bottom: 6px;
+        }
+
+        input, select {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #bbb;
+            border-radius: 6px;
+            box-sizing: border-box;
+            font-size: 15px;
+        }
+
+        button {
+            padding: 10px 16px;
+            border: none;
+            border-radius: 8px;
+            background: #2563eb;
+            color: white;
+            cursor: pointer;
+            font-size: 15px;
+        }
+
+        button:hover {
+            background: #1d4ed8;
+        }
+
+        .table-wrap {
+            max-height: 420px;
+            overflow-y: auto;
+            overflow-x: auto;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            background: white;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            min-width: 1100px;
+        }
+
+        th, td {
+            padding: 10px;
+            border-bottom: 1px solid #ddd;
+            text-align: left;
+            white-space: nowrap;
+        }
+
+        th {
+            background: #f1f5f9;
+            position: sticky;
+            top: 0;
+            z-index: 1;
+        }
+
+        .interpret-box {
+            background: #f8fafc;
+            border: 1px solid #ddd;
+            border-radius: 10px;
+            padding: 16px;
+            line-height: 1.7;
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        @media (max-width: 1100px) {
+            .filter-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .summary-grid {
+                grid-template-columns: 1fr 1fr;
+            }
+        }
+
+        @media (max-width: 700px) {
+            .summary-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <h1>Collector Business Report</h1>
+    <p><a href="/">Back to Home</a></p>
+
+    <div class="card">
+        <h2>Report Filters</h2>
+
+        <div class="filter-grid">
+            <div>
+                <label for="collector_id">Collector</label>
+                <select id="collector_id">
+                    <option value="">Select collector</option>
+                </select>
+            </div>
+
+            <div>
+                <label for="date_from">Date From</label>
+                <input type="date" id="date_from">
+            </div>
+
+            <div>
+                <label for="date_to">Date To</label>
+                <input type="date" id="date_to">
+            </div>
+
+            <div>
+                <button id="generateBtn" type="button">Generate Report</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="reportSection" class="hidden">
+        <div class="card">
+            <h2 id="reportTitle">Report Summary</h2>
+
+            <div class="summary-grid">
+                <div class="summary-box">
+                    <h3>Total Payments Collected</h3>
+                    <div class="value" id="totalPaymentsCollected">₱0.00</div>
+                </div>
+
+                <div class="summary-box">
+                    <h3>Total Remaining Balance</h3>
+                    <div class="value" id="totalRemainingBalance">₱0.00</div>
+                </div>
+
+                <div class="summary-box">
+                    <h3>Total Item Capital</h3>
+                    <div class="value" id="totalItemCapital">₱0.00</div>
+                </div>
+
+                <div class="summary-box">
+                    <h3>Total Expenses</h3>
+                    <div class="value" id="totalExpenses">₱0.00</div>
+                </div>
+
+                <div class="summary-box">
+                    <h3>Cash On Hand Given</h3>
+                    <div class="value" id="totalCashOnHand">₱0.00</div>
+                </div>
+
+                <div class="summary-box">
+                    <h3>Business Result</h3>
+                    <div class="value" id="businessResultAmount">₱0.00</div>
+                    <div id="businessResultLabel" class="neutral"></div>
+                </div>
+
+                <div class="summary-box">
+                    <h3>Collector Result</h3>
+                    <div class="value" id="collectorResultAmount">₱0.00</div>
+                    <div id="collectorResultLabel" class="neutral"></div>
+                </div>
+
+                <div class="summary-box">
+                    <h3>Commission %</h3>
+                    <div class="value" id="commissionPercent">0.00%</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <h2>Interpretation</h2>
+            <div class="interpret-box">
+                <div id="businessInterpretation"></div>
+                <div id="collectorInterpretation"></div>
+            </div>
+        </div>
+
+        <div class="card">
+            <h2>Payments Collected</h2>
+            <div class="table-wrap">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Payment ID</th>
+                            <th>Customer ID</th>
+                            <th>Customer Name</th>
+                            <th>Amount</th>
+                            <th>Payment Date</th>
+                            <th>Type</th>
+                        </tr>
+                    </thead>
+                    <tbody id="paymentsBody"></tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="card">
+            <h2>Customers With Remaining Balance</h2>
+            <div class="table-wrap">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Sale ID</th>
+                            <th>Customer ID</th>
+                            <th>Customer Name</th>
+                            <th>Item Bought</th>
+                            <th>Quantity</th>
+                            <th>Remaining Balance</th>
+                            <th>Collector</th>
+                        </tr>
+                    </thead>
+                    <tbody id="balancesBody"></tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="card">
+            <h2>Item Capital Details</h2>
+            <div class="table-wrap">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Sale ID</th>
+                            <th>Customer ID</th>
+                            <th>Customer Name</th>
+                            <th>Item Bought</th>
+                            <th>Quantity</th>
+                            <th>Capital Price</th>
+                            <th>Total Capital</th>
+                        </tr>
+                    </thead>
+                    <tbody id="capitalBody"></tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="card">
+            <h2>Expenses Included</h2>
+            <div class="table-wrap">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Driver Wage</th>
+                            <th>Food</th>
+                            <th>Gasoline</th>
+                            <th>Miscellaneous</th>
+                            <th>Total Expense</th>
+                            <th>Route</th>
+                            <th>Type</th>
+                            <th>Notes</th>
+                        </tr>
+                    </thead>
+                    <tbody id="expensesBody"></tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="card">
+            <h2>Cash On Hand / Remits</h2>
+            <div class="table-wrap">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Remit ID</th>
+                            <th>Remit Date</th>
+                            <th>Total Selected Payments</th>
+                            <th>Gas</th>
+                            <th>Food</th>
+                            <th>Miscellaneous</th>
+                            <th>Commission %</th>
+                            <th>Commission Amount</th>
+                            <th>Gross Total</th>
+                            <th>Cash On Hand</th>
+                            <th>Net Total</th>
+                            <th>Positive/Negative</th>
+                        </tr>
+                    </thead>
+                    <tbody id="remitsBody"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const collectorSelect = document.getElementById("collector_id");
+        const dateFromInput = document.getElementById("date_from");
+        const dateToInput = document.getElementById("date_to");
+        const generateBtn = document.getElementById("generateBtn");
+        const reportSection = document.getElementById("reportSection");
+
+        function money(value) {
+            return `₱${Number(value || 0).toFixed(2)}`;
+        }
+
+        function today() {
+            return new Date().toISOString().split("T")[0];
+        }
+
+        async function loadCollectors() {
+            try {
+                const res = await fetch("/reports/collectors");
+                const data = await res.json();
+
+                if (!res.ok) {
+                    alert(data.message || "Failed to load collectors");
+                    return;
+                }
+
+                collectorSelect.innerHTML = `<option value="">Select collector</option>`;
+
+                data.forEach(collector => {
+                    collectorSelect.innerHTML += `
+                        <option value="${collector.id}">
+                            ${collector.id} - ${collector.name}
+                        </option>
+                    `;
+                });
+            } catch (error) {
+                console.log(error);
+                alert("Could not load collectors");
+            }
+        }
+
+        function renderSummary(data) {
+            document.getElementById("reportTitle").textContent =
+                `Report Summary: ${data.filters.collector_name} (${data.filters.date_from} to ${data.filters.date_to})`;
+
+            document.getElementById("totalPaymentsCollected").textContent = money(data.summary.total_payments_collected);
+            document.getElementById("totalRemainingBalance").textContent = money(data.summary.total_remaining_balance);
+            document.getElementById("totalItemCapital").textContent = money(data.summary.total_item_capital);
+            document.getElementById("totalExpenses").textContent = money(data.summary.total_expenses);
+            document.getElementById("totalCashOnHand").textContent = money(data.summary.total_cash_on_hand);
+            document.getElementById("businessResultAmount").textContent = money(data.summary.business_result_amount);
+            document.getElementById("collectorResultAmount").textContent = money(data.summary.collector_result_amount);
+            document.getElementById("commissionPercent").textContent = `${Number(data.filters.commission_percent || 0).toFixed(2)}%`;
+
+            const businessLabel = document.getElementById("businessResultLabel");
+            businessLabel.textContent = data.summary.business_result_label;
+            businessLabel.className = data.summary.business_result_amount < 0 ? "bad" : (data.summary.business_result_amount > 0 ? "good" : "neutral");
+
+            const collectorLabel = document.getElementById("collectorResultLabel");
+            collectorLabel.textContent = data.summary.collector_result_label;
+            collectorLabel.className = data.summary.collector_result_amount < 0 ? "bad" : (data.summary.collector_result_amount > 0 ? "good" : "neutral");
+
+            document.getElementById("businessInterpretation").innerHTML =
+                `<strong>Business Status:</strong> ${data.summary.business_result_label} — ` +
+                `Payments collected ${money(data.summary.total_payments_collected)} minus item capital ${money(data.summary.total_item_capital)} ` +
+                `and expenses ${money(data.summary.total_expenses)} = ${money(data.summary.business_result_amount)}.`;
+
+            document.getElementById("collectorInterpretation").innerHTML =
+                `<strong>Collector Status:</strong> ${data.summary.collector_result_label} — ` +
+                `Based on total variance/shortage/excess of ${money(data.summary.collector_result_amount)} from remits and cash on hand.`;
+        }
+
+        function renderPayments(rows) {
+            const body = document.getElementById("paymentsBody");
+            body.innerHTML = "";
+
+            if (rows.length === 0) {
+                body.innerHTML = `<tr><td colspan="6">No payments found in this date range.</td></tr>`;
+                return;
+            }
+
+            rows.forEach(row => {
+                body.innerHTML += `
+                    <tr>
+                        <td>${row.payment_id}</td>
+                        <td>${row.customer_id}</td>
+                        <td>${row.customer_name}</td>
+                        <td>${money(row.amount)}</td>
+                        <td>${row.payment_date}</td>
+                        <td>${row.payment_type}</td>
+                    </tr>
+                `;
+            });
+        }
+
+        function renderBalances(rows) {
+            const body = document.getElementById("balancesBody");
+            body.innerHTML = "";
+
+            if (rows.length === 0) {
+                body.innerHTML = `<tr><td colspan="7">No balance records found.</td></tr>`;
+                return;
+            }
+
+            rows.forEach(row => {
+                body.innerHTML += `
+                    <tr>
+                        <td>${row.sale_id}</td>
+                        <td>${row.customer_id}</td>
+                        <td>${row.customer_name}</td>
+                        <td>${row.item_name}</td>
+                        <td>${row.quantity}</td>
+                        <td>${money(row.balance)}</td>
+                        <td>${row.collector_name || ""}</td>
+                    </tr>
+                `;
+            });
+        }
+
+        function renderCapital(rows) {
+            const body = document.getElementById("capitalBody");
+            body.innerHTML = "";
+
+            if (rows.length === 0) {
+                body.innerHTML = `<tr><td colspan="7">No capital records found.</td></tr>`;
+                return;
+            }
+
+            rows.forEach(row => {
+                body.innerHTML += `
+                    <tr>
+                        <td>${row.sale_id}</td>
+                        <td>${row.customer_id}</td>
+                        <td>${row.customer_name}</td>
+                        <td>${row.item_name}</td>
+                        <td>${row.quantity}</td>
+                        <td>${money(row.capital_price)}</td>
+                        <td>${money(row.capital_total)}</td>
+                    </tr>
+                `;
+            });
+        }
+
+        function renderExpenses(rows) {
+            const body = document.getElementById("expensesBody");
+            body.innerHTML = "";
+
+            if (rows.length === 0) {
+                body.innerHTML = `<tr><td colspan="9">No expenses found in this date range.</td></tr>`;
+                return;
+            }
+
+            rows.forEach(row => {
+                body.innerHTML += `
+                    <tr>
+                        <td>${row.expense_date}</td>
+                        <td>${money(row.driver_daily_wage)}</td>
+                        <td>${money(row.staffs_food_allowance)}</td>
+                        <td>${money(row.gasoline)}</td>
+                        <td>${money(row.miscellaneous)}</td>
+                        <td>${money(row.total_expense)}</td>
+                        <td>${row.route || ""}</td>
+                        <td>${row.expense_type || ""}</td>
+                        <td>${row.notes || ""}</td>
+                    </tr>
+                `;
+            });
+        }
+
+        function renderRemits(rows) {
+            const body = document.getElementById("remitsBody");
+            body.innerHTML = "";
+
+            if (rows.length === 0) {
+                body.innerHTML = `<tr><td colspan="12">No remits found in this date range.</td></tr>`;
+                return;
+            }
+
+            rows.forEach(row => {
+                body.innerHTML += `
+                    <tr>
+                        <td>${row.id}</td>
+                        <td>${row.remit_date}</td>
+                        <td>${money(row.total_selected_payments)}</td>
+                        <td>${money(row.gas)}</td>
+                        <td>${money(row.food)}</td>
+                        <td>${money(row.miscellaneous)}</td>
+                        <td>${Number(row.commission_percent || 0).toFixed(2)}%</td>
+                        <td>${money(row.commission_amount)}</td>
+                        <td>${money(row.gross_total)}</td>
+                        <td>${money(row.cash_on_hand)}</td>
+                        <td>${money(row.net_total)}</td>
+                        <td>${money(row.variance_amount)}</td>
+                    </tr>
+                `;
+            });
+        }
+
+        async function generateReport() {
+            const collector_id = collectorSelect.value;
+            const date_from = dateFromInput.value;
+            const date_to = dateToInput.value;
+
+            if (!collector_id || !date_from || !date_to) {
+                alert("Please select collector, date from, and date to");
+                return;
+            }
+
+            try {
+                const params = new URLSearchParams({
+                    collector_id,
+                    date_from,
+                    date_to
+                });
+
+                const res = await fetch(`/reports?${params.toString()}`);
+                const data = await res.json();
+
+                if (!res.ok) {
+                    alert(data.message || "Failed to generate report");
+                    return;
+                }
+
+                renderSummary(data);
+                renderPayments(data.details.payments);
+                renderBalances(data.details.balances);
+                renderCapital(data.details.capital);
+                renderExpenses(data.details.expenses);
+                renderRemits(data.details.remits);
+
+                reportSection.classList.remove("hidden");
+            } catch (error) {
+                console.log(error);
+                alert("Could not generate report");
+            }
+        }
+
+        function setDefaultDates() {
+            const todayDate = today();
+            dateFromInput.value = todayDate;
+            dateToInput.value = todayDate;
+        }
+
+        generateBtn.addEventListener("click", generateReport);
+
+        setDefaultDates();
+        loadCollectors();
+    </script>
+</body>
+</html>

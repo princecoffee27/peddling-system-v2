@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Customer and Collection</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+        }
+
+        h1, h2 {
+            margin-bottom: 10px;
+        }
+
+        .section {
+            border: 1px solid #ccc;
+            padding: 15px;
+            margin-bottom: 20px;
+            border-radius: 8px;
+        }
+
+        input, select, button {
+            padding: 8px;
+            margin: 5px 0 10px 0;
+            width: 100%;
+            max-width: 400px;
+        }
+
+        button {
+            width: auto;
+            cursor: pointer;
+        }
+
+        table {
+            border-collapse: collapse;
+            width: 100%;
+            margin-top: 10px;
+        }
+
+        table, th, td {
+            border: 1px solid #999;
+        }
+
+        th, td {
+            padding: 8px;
+            text-align: left;
+        }
+
+        .two-columns {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+
+        .selected-box {
+            background: #f3f3f3;
+            padding: 10px;
+            border-radius: 6px;
+            margin-bottom: 10px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Customer + Installment Entry</h1>
+    <a href="/">Back to Home</a>
+
+    <div class="two-columns">
+        <!-- CUSTOMER SECTION -->
+        <div class="section">
+            <h2>Add Customer</h2>
+            <form id="customerForm">
+                <label>Customer ID</label><br>
+                <input type="number" id="customer_id" required>
+
+                <label>Customer Name</label><br>
+                <input type="text" id="customer_name" required>
+
+                <label>Address</label><br>
+                <input type="text" id="customer_address" required>
+
+                <label>Phone</label><br>
+                <input type="text" id="customer_phone" required>
+
+                <label>Collector</label><br>
+                <select id="collector_id">
+                    <option value="">Select collector</option>
+                </select>
+
+                <button type="submit">Save Customer</button>
+            </form>
+
+            <h2>Customer List</h2>
+            <table>
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Name</th>
+                        <th>Collector</th>
+                        <th>Action</th>
+                    </tr>
+                </thead>
+                <tbody id="customerTableBody"></tbody>
+            </table>
+        </div>
+
+        <!-- SALE SECTION -->
+        <div class="section">
+            <h2>Create Sale / Installment</h2>
+
+            <div class="selected-box">
+                <strong>Selected Customer:</strong>
+                <div id="selectedCustomerText">No customer selected</div>
+            </div>
+
+            <form id="saleForm">
+                <input type="hidden" id="selected_customer_id">
+
+                <label>Item</label><br>
+                <select id="item_id" required>
+                    <option value="">Select item</option>
+                </select>
+
+                <label>Quantity</label><br>
+                <input type="number" id="quantity" min="1" required>
+
+                <label>Downpayment</label><br>
+                <input type="number" id="downpayment" min="0" step="0.01" required>
+
+                <button type="submit">Save Sale</button>
+            </form>
+
+            <h3>Computed Values</h3>
+            <p>Total: <span id="totalPreview">0.00</span></p>
+            <p>Balance: <span id="balancePreview">0.00</span></p>
+        </div>
+    </div>
+
+    <div class="section">
+        <h2>Sales List</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>Sale ID</th>
+                    <th>Customer ID</th>
+                    <th>Customer Name</th>
+                    <th>Item</th>
+                    <th>Quantity</th>
+                    <th>Total</th>
+                    <th>Downpayment</th>
+                    <th>Balance</th>
+                </tr>
+            </thead>
+            <tbody id="salesTableBody"></tbody>
+        </table>
+    </div>
+
+    <script>
+        const customerForm = document.getElementById("customerForm");
+        const saleForm = document.getElementById("saleForm");
+        const customerTableBody = document.getElementById("customerTableBody");
+        const collectorSelect = document.getElementById("collector_id");
+        const itemSelect = document.getElementById("item_id");
+        const quantityInput = document.getElementById("quantity");
+        const downpaymentInput = document.getElementById("downpayment");
+        const totalPreview = document.getElementById("totalPreview");
+        const balancePreview = document.getElementById("balancePreview");
+        const selectedCustomerIdInput = document.getElementById("selected_customer_id");
+        const selectedCustomerText = document.getElementById("selectedCustomerText");
+        const salesTableBody = document.getElementById("salesTableBody");
+
+        let inventoryItems = [];
+
+        async function loadCollectors() {
+            const res = await fetch("/customers/collectors");
+            const data = await res.json();
+
+            collectorSelect.innerHTML = `<option value="">Select collector</option>`;
+
+            data.forEach(collector => {
+                collectorSelect.innerHTML += `
+                    <option value="${collector.id}">
+                        ${collector.id} - ${collector.name}
+                    </option>
+                `;
+            });
+        }
+
+        async function loadCustomers() {
+            const res = await fetch("/customers");
+            const data = await res.json();
+
+            customerTableBody.innerHTML = "";
+
+            data.forEach(customer => {
+                customerTableBody.innerHTML += `
+                    <tr>
+                        <td>${customer.id}</td>
+                        <td>${customer.name}</td>
+                        <td>${customer.collector_name || ""}</td>
+                        <td>
+                            <button onclick="selectCustomer('${customer.id}', '${customer.name}')">Use</button>
+                        </td>
+                    </tr>
+                `;
+            });
+        }
+
+        function selectCustomer(id, name) {
+            selectedCustomerIdInput.value = id;
+            selectedCustomerText.textContent = `${id} - ${name}`;
+        }
+
+        async function loadInventory() {
+            const res = await fetch("/sales/inventory");
+            const items = await res.json();
+            inventoryItems = items;
+
+            itemSelect.innerHTML = `<option value="">Select item</option>`;
+
+            items.forEach(item => {
+                itemSelect.innerHTML += `
+                    <option value="${item.id}">
+                        ${item.item_name} - ₱${item.price} (Stock: ${item.quantity})
+                    </option>
+                `;
+            });
+        }
+
+        function updatePreview() {
+            const itemId = itemSelect.value;
+            const quantity = Number(quantityInput.value) || 0;
+            const downpayment = Number(downpaymentInput.value) || 0;
+
+            const selectedItem = inventoryItems.find(item => String(item.id) === String(itemId));
+
+            if (!selectedItem) {
+                totalPreview.textContent = "0.00";
+                balancePreview.textContent = "0.00";
+                return;
+            }
+
+            const total = Number(selectedItem.price) * quantity;
+            const balance = total - downpayment;
+
+            totalPreview.textContent = total.toFixed(2);
+            balancePreview.textContent = balance.toFixed(2);
+        }
+
+        async function loadSales() {
+            const res = await fetch("/sales");
+            const sales = await res.json();
+
+            salesTableBody.innerHTML = "";
+
+            sales.forEach(sale => {
+                salesTableBody.innerHTML += `
+                    <tr>
+                        <td>${sale.id}</td>
+                        <td>${sale.customer_id}</td>
+                        <td>${sale.customer_name}</td>
+                        <td>${sale.item_name}</td>
+                        <td>${sale.quantity}</td>
+                        <td>${sale.total}</td>
+                        <td>${sale.downpayment}</td>
+                        <td>${sale.balance}</td>
+                    </tr>
+                `;
+            });
+        }
+
+        customerForm.addEventListener("submit", async function(e) {
+            e.preventDefault();
+
+            const id = document.getElementById("customer_id").value;
+            const name = document.getElementById("customer_name").value;
+            const address = document.getElementById("customer_address").value;
+            const phone = document.getElementById("customer_phone").value;
+            const collector_id = collectorSelect.value;
+
+            const response = await fetch("/customers", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({ id, name, address, phone, collector_id })
+            });
+
+            const result = await response.json();
+
+            if (!response.ok) {
+                alert(result.message || "Failed to add customer");
+                return;
+            }
+
+            alert("Customer added successfully");
+            customerForm.reset();
+            loadCustomers();
+
+            selectedCustomerIdInput.value = id;
+            selectedCustomerText.textContent = `${id} - ${name}`;
+        });
+
+        saleForm.addEventListener("submit", async function(e) {
+            e.preventDefault();
+
+            const customer_id = selectedCustomerIdInput.value;
+            const item_id = itemSelect.value;
+            const quantity = quantityInput.value;
+            const downpayment = downpaymentInput.value;
+
+            if (!customer_id) {
+                alert("Please select or add a customer first.");
+                return;
+            }
+
+            const response = await fetch("/sales", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({
+                    customer_id,
+                    item_id,
+                    quantity,
+                    downpayment
+                })
+            });
+
+            const result = await response.json();
+
+            if (!response.ok) {
+                alert(result.message || "Failed to save sale");
+                return;
+            }
+
+            alert("Sale saved successfully");
+            saleForm.reset();
+            totalPreview.textContent = "0.00";
+            balancePreview.textContent = "0.00";
+            loadInventory();
+            loadSales();
+        });
+
+        itemSelect.addEventListener("change", updatePreview);
+        quantityInput.addEventListener("input", updatePreview);
+        downpaymentInput.addEventListener("input", updatePreview);
+
+        loadCollectors();
+        loadCustomers();
+        loadInventory();
+        loadSales();
+    </script>
+</body>
+</html>

@@ -1,0 +1,441 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Collection</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background: #f7f7f7;
+        }
+
+        h1 {
+            margin-bottom: 10px;
+        }
+
+        .card {
+            background: #fff;
+            border: 1px solid #ddd;
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+
+        .search-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr auto auto;
+            gap: 15px;
+            align-items: end;
+        }
+
+        label {
+            display: block;
+            font-weight: bold;
+            margin-bottom: 6px;
+        }
+
+        input, select {
+            width: 100%;
+            padding: 10px;
+            font-size: 15px;
+            border: 1px solid #bbb;
+            border-radius: 6px;
+            box-sizing: border-box;
+        }
+
+        button {
+            padding: 10px 16px;
+            font-size: 15px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            background: #2563eb;
+            color: white;
+        }
+
+        button:hover {
+            background: #1d4ed8;
+        }
+
+        .secondary-btn {
+            background: #64748b;
+        }
+
+        .secondary-btn:hover {
+            background: #475569;
+        }
+
+        .table-wrap {
+            max-height: 600px;
+            overflow-y: auto;
+            overflow-x: auto;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            min-width: 1100px;
+        }
+
+        th, td {
+            border-bottom: 1px solid #ddd;
+            padding: 10px;
+            text-align: left;
+            white-space: nowrap;
+            vertical-align: top;
+        }
+
+        th {
+            background: #f1f5f9;
+            position: sticky;
+            top: 0;
+            z-index: 1;
+        }
+
+        .inline-payment-box {
+            display: grid;
+            grid-template-columns: 1fr 1fr auto;
+            gap: 10px;
+            align-items: end;
+            margin-top: 8px;
+        }
+
+        .payment-row {
+            background: #fafafa;
+        }
+
+        .small-text {
+            color: #666;
+            font-size: 13px;
+        }
+
+        .action-btn {
+            background: #16a34a;
+        }
+
+        .action-btn:hover {
+            background: #15803d;
+        }
+
+        .history-btn {
+            background: #7c3aed;
+        }
+
+        .history-btn:hover {
+            background: #6d28d9;
+        }
+
+        .history-box {
+            margin-top: 8px;
+            padding: 10px;
+            background: #f8fafc;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+        }
+
+        @media (max-width: 1000px) {
+            .search-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .inline-payment-box {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <h1>Collection / Payment Entry</h1>
+    <p><a href="/">Back to Home</a></p>
+
+    <div class="card">
+        <h2>Search Customer</h2>
+        <div class="search-grid">
+            <div>
+                <label for="search_customer_id">Customer ID</label>
+                <input type="number" id="search_customer_id" placeholder="Enter customer ID">
+            </div>
+
+            <div>
+                <label for="search_collector_id">Collector</label>
+                <select id="search_collector_id">
+                    <option value="">Select collector</option>
+                </select>
+            </div>
+
+            <div>
+                <button id="searchBtn">Search</button>
+            </div>
+
+            <div>
+                <button type="button" id="showAllBtn" class="secondary-btn">Show All</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>Search Results</h2>
+        <p class="small-text">Click "Add Payment" beside a row to record payment and date.</p>
+
+        <div class="table-wrap">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Customer ID</th>
+                        <th>Customer Name</th>
+                        <th>Customer Address</th>
+                        <th>Collector</th>
+                        <th>Last Payment</th>
+                        <th>Last Payment Date</th>
+                        <th>Balance</th>
+                        <th>Action</th>
+                    </tr>
+                </thead>
+                <tbody id="resultsTableBody"></tbody>
+            </table>
+        </div>
+    </div>
+
+    <script>
+        const customerIdInput = document.getElementById("search_customer_id");
+        const collectorSelect = document.getElementById("search_collector_id");
+        const searchBtn = document.getElementById("searchBtn");
+        const showAllBtn = document.getElementById("showAllBtn");
+        const resultsTableBody = document.getElementById("resultsTableBody");
+
+        async function loadCollectors() {
+            try {
+                const res = await fetch("/payments/collectors");
+                const data = await res.json();
+
+                if (!res.ok) {
+                    alert(data.message || "Failed to load collectors");
+                    return;
+                }
+
+                collectorSelect.innerHTML = `<option value="">Select collector</option>`;
+
+                data.forEach(collector => {
+                    collectorSelect.innerHTML += `
+                        <option value="${collector.id}">
+                            ${collector.id} - ${collector.name}
+                        </option>
+                    `;
+                });
+            } catch (error) {
+                console.log(error);
+                alert("Could not load collectors");
+            }
+        }
+
+        function getTodayDate() {
+            return new Date().toISOString().split("T")[0];
+        }
+
+        async function searchRecords() {
+            const customer_id = customerIdInput.value.trim();
+            const collector_id = collectorSelect.value;
+
+            const params = new URLSearchParams();
+
+            if (customer_id) {
+                params.append("customer_id", customer_id);
+            }
+
+            if (collector_id) {
+                params.append("collector_id", collector_id);
+            }
+
+            try {
+                const res = await fetch(`/payments/search?${params.toString()}`);
+                const data = await res.json();
+
+                if (!res.ok) {
+                    alert(data.message || "Failed to search records");
+                    return;
+                }
+
+                renderResults(data);
+            } catch (error) {
+                console.log(error);
+                alert("Could not search records");
+            }
+        }
+
+        function renderResults(data) {
+            resultsTableBody.innerHTML = "";
+
+            if (data.length === 0) {
+                resultsTableBody.innerHTML = `
+                    <tr>
+                        <td colspan="8">No matching records found.</td>
+                    </tr>
+                `;
+                return;
+            }
+
+            data.forEach((row) => {
+                resultsTableBody.innerHTML += `
+                    <tr>
+                        <td>${row.customer_id}</td>
+                        <td>${row.customer_name}</td>
+                        <td>${row.customer_address || ""}</td>
+                        <td>${row.collector_name || ""}</td>
+                        <td>${row.last_payment_amount ?? ""}</td>
+                        <td>${row.last_payment_date ?? ""}</td>
+                        <td>${row.balance}</td>
+                        <td>
+                            <button class="action-btn" onclick="togglePaymentForm(${row.sale_id})">Add Payment</button>
+                            <button class="history-btn" onclick="toggleHistory(${row.sale_id})">History</button>
+                        </td>
+                    </tr>
+
+                    <tr id="payment-row-${row.sale_id}" class="payment-row" style="display:none;">
+                        <td colspan="8">
+                            <div class="inline-payment-box">
+                                <div>
+                                    <label>Payment Amount</label>
+                                    <input type="number" id="payment-amount-${row.sale_id}" min="0.01" step="0.01" placeholder="Enter payment amount">
+                                </div>
+
+                                <div>
+                                    <label>Payment Date</label>
+                                    <input type="date" id="payment-date-${row.sale_id}" value="${getTodayDate()}">
+                                </div>
+
+                                <div>
+                                    <button class="action-btn" onclick="savePayment(${row.sale_id})">Save Payment</button>
+                                </div>
+                            </div>
+                        </td>
+                    </tr>
+
+                    <tr id="history-row-${row.sale_id}" class="payment-row" style="display:none;">
+                        <td colspan="8">
+                            <div class="history-box" id="history-box-${row.sale_id}">
+                                Loading payment history...
+                            </div>
+                        </td>
+                    </tr>
+                `;
+            });
+        }
+
+        function togglePaymentForm(saleId) {
+            const row = document.getElementById(`payment-row-${saleId}`);
+            row.style.display = row.style.display === "none" ? "table-row" : "none";
+        }
+
+        async function savePayment(saleId) {
+            const amountInput = document.getElementById(`payment-amount-${saleId}`);
+            const dateInput = document.getElementById(`payment-date-${saleId}`);
+
+            const amount = amountInput.value;
+            const payment_date = dateInput.value;
+
+            if (!amount || !payment_date) {
+                alert("Please enter payment amount and payment date");
+                return;
+            }
+
+            try {
+                const res = await fetch("/payments", {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json"
+                    },
+                    body: JSON.stringify({
+                        sale_id: saleId,
+                        amount,
+                        payment_date
+                    })
+                });
+
+                const data = await res.json();
+
+                if (!res.ok) {
+                    alert(data.message || "Failed to save payment");
+                    return;
+                }
+
+                alert("Payment recorded successfully");
+                await searchRecords();
+            } catch (error) {
+                console.log(error);
+                alert("Could not save payment");
+            }
+        }
+
+        async function toggleHistory(saleId) {
+            const row = document.getElementById(`history-row-${saleId}`);
+            const box = document.getElementById(`history-box-${saleId}`);
+
+            if (row.style.display === "none") {
+                row.style.display = "table-row";
+
+                try {
+                    const res = await fetch(`/payments/history/${saleId}`);
+                    const data = await res.json();
+
+                    if (!res.ok) {
+                        box.innerHTML = data.message || "Failed to load history";
+                        return;
+                    }
+
+                    if (data.length === 0) {
+                        box.innerHTML = "No payment history.";
+                        return;
+                    }
+
+                    let html = `
+                        <table style="width:100%; border-collapse:collapse;">
+                            <thead>
+                                <tr>
+                                    <th style="text-align:left; padding:6px; border-bottom:1px solid #ddd;">Payment ID</th>
+                                    <th style="text-align:left; padding:6px; border-bottom:1px solid #ddd;">Amount</th>
+                                    <th style="text-align:left; padding:6px; border-bottom:1px solid #ddd;">Payment Date</th>
+                                    <th style="text-align:left; padding:6px; border-bottom:1px solid #ddd;">Type</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                    `;
+
+                    data.forEach(payment => {
+                        html += `
+                            <tr>
+                                <td style="padding:6px; border-bottom:1px solid #eee;">${payment.id}</td>
+                                <td style="padding:6px; border-bottom:1px solid #eee;">${payment.amount}</td>
+                                <td style="padding:6px; border-bottom:1px solid #eee;">${payment.payment_date}</td>
+                                <td style="padding:6px; border-bottom:1px solid #eee;">${payment.payment_type}</td>
+                            </tr>
+                        `;
+                    });
+
+                    html += `</tbody></table>`;
+                    box.innerHTML = html;
+                } catch (error) {
+                    console.log(error);
+                    box.innerHTML = "Could not load payment history.";
+                }
+            } else {
+                row.style.display = "none";
+            }
+        }
+
+        searchBtn.addEventListener("click", searchRecords);
+
+        showAllBtn.addEventListener("click", async () => {
+            customerIdInput.value = "";
+            collectorSelect.value = "";
+            await searchRecords();
+        });
+
+        loadCollectors();
+        searchRecords();
+    </script>
+</body>
+</html>

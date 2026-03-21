@@ -1,0 +1,669 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Customer Master List</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background: #f7f7f7;
+        }
+
+        h1 {
+            margin-bottom: 10px;
+        }
+
+        .card {
+            background: white;
+            border: 1px solid #ddd;
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+
+        .top-grid {
+            display: grid;
+            grid-template-columns: 1fr auto auto;
+            gap: 12px;
+            align-items: end;
+            max-width: 900px;
+        }
+
+        label {
+            display: block;
+            font-weight: bold;
+            margin-bottom: 6px;
+        }
+
+        input, select {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #bbb;
+            border-radius: 6px;
+            box-sizing: border-box;
+            font-size: 15px;
+        }
+
+        button {
+            padding: 10px 16px;
+            border: none;
+            border-radius: 8px;
+            background: #2563eb;
+            color: white;
+            cursor: pointer;
+        }
+
+        button:hover {
+            background: #1d4ed8;
+        }
+
+        .secondary-btn {
+            background: #64748b;
+        }
+
+        .secondary-btn:hover {
+            background: #475569;
+        }
+
+        .edit-btn {
+            background: #f59e0b;
+        }
+
+        .edit-btn:hover {
+            background: #d97706;
+        }
+
+        .delete-btn {
+            background: #dc2626;
+        }
+
+        .delete-btn:hover {
+            background: #b91c1c;
+        }
+
+        .toggle-btn {
+            background: #dc2626;
+        }
+
+        .toggle-btn:hover {
+            background: #b91c1c;
+        }
+
+        .active-btn {
+            background: #16a34a;
+        }
+
+        .active-btn:hover {
+            background: #15803d;
+        }
+
+        .save-btn {
+            background: #16a34a;
+        }
+
+        .save-btn:hover {
+            background: #15803d;
+        }
+
+        .table-wrap {
+            max-height: 650px;
+            overflow-y: auto;
+            overflow-x: auto;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            background: white;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            min-width: 1700px;
+        }
+
+        th, td {
+            padding: 10px;
+            border-bottom: 1px solid #ddd;
+            text-align: left;
+            white-space: nowrap;
+            vertical-align: top;
+        }
+
+        th {
+            background: #f1f5f9;
+            position: sticky;
+            top: 0;
+            z-index: 1;
+        }
+
+        .inactive-row {
+            background: #fef2f2;
+        }
+
+        .muted {
+            color: #666;
+            margin-top: 4px;
+        }
+
+        .edit-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr 1fr 1fr 1fr auto;
+            gap: 10px;
+            align-items: end;
+        }
+
+        .payment-edit-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr auto;
+            gap: 10px;
+            align-items: end;
+        }
+
+        .sub-row {
+            background: #fafafa;
+        }
+
+        @media (max-width: 1200px) {
+            .top-grid,
+            .edit-grid,
+            .payment-edit-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <h1>Customer Master List</h1>
+
+    <p><a href="/">Back to Home</a></p>
+
+    <div class="card">
+        <h2>Filter by Collector</h2>
+
+        <div class="top-grid">
+            <div>
+                <label for="collectorFilter">Under whose collector</label>
+                <select id="collectorFilter">
+                    <option value="">Show all collectors</option>
+                </select>
+            </div>
+
+            <div>
+                <button id="filterBtn" type="button">Apply Filter</button>
+            </div>
+
+            <div>
+                <button id="showAllBtn" type="button" class="secondary-btn">Show All</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>Customer List</h2>
+        <p class="muted">Default view shows all customer sales records in your database.</p>
+
+        <div class="table-wrap">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Customer ID</th>
+                        <th>Customer Name</th>
+                        <th>Address</th>
+                        <th>Phone Number</th>
+                        <th>Item Bought</th>
+                        <th>Quantity</th>
+                        <th>Capital Item Price</th>
+                        <th>Selling Item Price</th>
+                        <th>Under Whose Collector</th>
+                        <th>Status</th>
+                        <th>Payment History</th>
+                        <th>Action</th>
+                    </tr>
+                </thead>
+                <tbody id="customerTableBody"></tbody>
+            </table>
+        </div>
+    </div>
+
+    <script>
+        const collectorFilter = document.getElementById("collectorFilter");
+        const filterBtn = document.getElementById("filterBtn");
+        const showAllBtn = document.getElementById("showAllBtn");
+        const tableBody = document.getElementById("customerTableBody");
+
+        let collectorsCache = [];
+        let itemsCache = [];
+
+        async function loadCollectors() {
+            try {
+                const res = await fetch("/collectors");
+                const data = await res.json();
+
+                if (!res.ok) {
+                    alert(data.message || "Failed to load collectors");
+                    return;
+                }
+
+                collectorsCache = data;
+                collectorFilter.innerHTML = `<option value="">Show all collectors</option>`;
+
+                data.forEach(collector => {
+                    collectorFilter.innerHTML += `
+                        <option value="${collector.id}">
+                            ${collector.id} - ${collector.name}
+                        </option>
+                    `;
+                });
+            } catch (error) {
+                console.log(error);
+                alert("Could not load collectors");
+            }
+        }
+
+        async function loadItems() {
+            try {
+                const res = await fetch("/collectors/items");
+                const data = await res.json();
+
+                if (!res.ok) {
+                    alert(data.message || "Failed to load items");
+                    return;
+                }
+
+                itemsCache = data;
+            } catch (error) {
+                console.log(error);
+                alert("Could not load items");
+            }
+        }
+
+        function collectorOptionsHtml(selectedId) {
+            let html = `<option value="">Select collector</option>`;
+
+            collectorsCache.forEach(collector => {
+                const selected = String(collector.id) === String(selectedId) ? "selected" : "";
+                html += `<option value="${collector.id}" ${selected}>${collector.id} - ${collector.name}</option>`;
+            });
+
+            return html;
+        }
+
+        function itemOptionsHtml(selectedId) {
+            let html = `<option value="">Select item</option>`;
+
+            itemsCache.forEach(item => {
+                const selected = String(item.id) === String(selectedId) ? "selected" : "";
+                html += `<option value="${item.id}" ${selected}>${item.item_name} (Stock: ${item.quantity})</option>`;
+            });
+
+            return html;
+        }
+
+        async function loadCustomerSales() {
+            try {
+                const collector_id = collectorFilter.value;
+                const params = new URLSearchParams();
+
+                if (collector_id) {
+                    params.append("collector_id", collector_id);
+                }
+
+                const res = await fetch(`/collectors/customer-sales?${params.toString()}`);
+                const data = await res.json();
+
+                if (!res.ok) {
+                    alert(data.message || "Failed to load customers");
+                    return;
+                }
+
+                renderCustomerSales(data);
+            } catch (error) {
+                console.log(error);
+                alert("Could not load customers");
+            }
+        }
+
+        function renderCustomerSales(data) {
+            tableBody.innerHTML = "";
+
+            if (data.length === 0) {
+                tableBody.innerHTML = `
+                    <tr>
+                        <td colspan="12">No customer records found.</td>
+                    </tr>
+                `;
+                return;
+            }
+
+            data.forEach(row => {
+                const rowClass = Number(row.customer_is_active) === 1 ? "" : "inactive-row";
+                const statusText = Number(row.customer_is_active) === 1 ? "Active" : "Inactive";
+                const toggleText = Number(row.customer_is_active) === 1 ? "Deactivate" : "Activate";
+                const toggleClass = Number(row.customer_is_active) === 1 ? "toggle-btn" : "active-btn";
+
+                tableBody.innerHTML += `
+                    <tr class="${rowClass}">
+                        <td>${row.customer_id}</td>
+                        <td>${row.customer_name}</td>
+                        <td>${row.customer_address || ""}</td>
+                        <td>${row.customer_phone || ""}</td>
+                        <td>${row.item_name || ""}</td>
+                        <td>${row.quantity ?? ""}</td>
+                        <td>${row.capital_price ?? ""}</td>
+                        <td>${row.selling_price ?? ""}</td>
+                        <td>${row.collector_name || ""}</td>
+                        <td>${statusText}</td>
+                        <td>
+                            <button class="secondary-btn" type="button" onclick="toggleHistory(${row.sale_id})">History</button>
+                        </td>
+                        <td>
+                            <button class="edit-btn" type="button" onclick="toggleCustomerEdit(${row.sale_id})">Edit</button>
+                            <button class="delete-btn" type="button" onclick="deleteCustomerSale(${row.sale_id})">Delete</button>
+                            <button class="${toggleClass}" type="button" onclick="toggleCustomerStatus(${row.customer_id})">${toggleText}</button>
+                        </td>
+                    </tr>
+
+                    <tr id="customer-edit-row-${row.sale_id}" class="sub-row" style="display:none;">
+                        <td colspan="12">
+                            <div class="edit-grid">
+                                <div>
+                                    <label>Customer Name</label>
+                                    <input type="text" id="customer-name-${row.sale_id}" value="${row.customer_name || ""}">
+                                </div>
+
+                                <div>
+                                    <label>Address</label>
+                                    <input type="text" id="customer-address-${row.sale_id}" value="${row.customer_address || ""}">
+                                </div>
+
+                                <div>
+                                    <label>Phone</label>
+                                    <input type="text" id="customer-phone-${row.sale_id}" value="${row.customer_phone || ""}">
+                                </div>
+
+                                <div>
+                                    <label>Collector</label>
+                                    <select id="customer-collector-${row.sale_id}">
+                                        ${collectorOptionsHtml(row.collector_id)}
+                                    </select>
+                                </div>
+
+                                <div>
+                                    <label>Item Bought</label>
+                                    <select id="item-id-${row.sale_id}">
+                                        ${itemOptionsHtml(row.item_id)}
+                                    </select>
+                                </div>
+
+                                <div>
+                                    <label>Quantity</label>
+                                    <input type="number" id="quantity-${row.sale_id}" min="1" value="${row.quantity}">
+                                </div>
+
+                                <div>
+                                    <button class="save-btn" type="button" onclick="saveCustomerSaleEdit(${row.sale_id})">Save Edit</button>
+                                </div>
+                            </div>
+                        </td>
+                    </tr>
+
+                    <tr id="history-row-${row.sale_id}" class="sub-row" style="display:none;">
+                        <td colspan="12">
+                            <div id="history-box-${row.sale_id}">Loading payment history...</div>
+                        </td>
+                    </tr>
+                `;
+            });
+        }
+
+        function toggleCustomerEdit(saleId) {
+            const row = document.getElementById(`customer-edit-row-${saleId}`);
+            row.style.display = row.style.display === "none" ? "table-row" : "none";
+        }
+
+        async function saveCustomerSaleEdit(saleId) {
+            const customer_name = document.getElementById(`customer-name-${saleId}`).value;
+            const customer_address = document.getElementById(`customer-address-${saleId}`).value;
+            const customer_phone = document.getElementById(`customer-phone-${saleId}`).value;
+            const collector_id = document.getElementById(`customer-collector-${saleId}`).value;
+            const item_id = document.getElementById(`item-id-${saleId}`).value;
+            const quantity = document.getElementById(`quantity-${saleId}`).value;
+
+            if (!customer_name || !customer_address || !customer_phone || !collector_id || !item_id || !quantity) {
+                alert("Please complete all editable fields");
+                return;
+            }
+
+            try {
+                const res = await fetch(`/collectors/customer-sale/${saleId}`, {
+                    method: "PUT",
+                    headers: {
+                        "Content-Type": "application/json"
+                    },
+                    body: JSON.stringify({
+                        customer_name,
+                        customer_address,
+                        customer_phone,
+                        collector_id,
+                        item_id,
+                        quantity
+                    })
+                });
+
+                const data = await res.json();
+
+                if (!res.ok) {
+                    alert(data.message || "Failed to update customer sale");
+                    return;
+                }
+
+                alert("Customer sale updated successfully");
+                await loadItems();
+                await loadCustomerSales();
+            } catch (error) {
+                console.log(error);
+                alert("Could not update customer sale");
+            }
+        }
+
+        async function deleteCustomerSale(saleId) {
+            const confirmed = confirm(
+                "Are you sure you want to delete this whole mistaken customer record?\n\nThis will restore stock, delete payments, delete the sale, and possibly delete the customer record."
+            );
+
+            if (!confirmed) return;
+
+            try {
+                const res = await fetch(`/collectors/customer-sale/${saleId}`, {
+                    method: "DELETE"
+                });
+
+                const data = await res.json();
+
+                if (!res.ok) {
+                    alert(data.message || "Failed to delete customer sale");
+                    return;
+                }
+
+                alert(data.message || "Customer sale deleted successfully");
+                await loadItems();
+                await loadCustomerSales();
+            } catch (error) {
+                console.log(error);
+                alert("Could not delete customer sale");
+            }
+        }
+
+        async function toggleCustomerStatus(customerId) {
+            const confirmed = confirm("Are you sure you want to change this customer's status?");
+            if (!confirmed) return;
+
+            try {
+                const res = await fetch(`/collectors/customer/${customerId}/toggle`, {
+                    method: "PUT"
+                });
+
+                const data = await res.json();
+
+                if (!res.ok) {
+                    alert(data.message || "Failed to update customer status");
+                    return;
+                }
+
+                alert("Customer status updated successfully");
+                await loadCustomerSales();
+            } catch (error) {
+                console.log(error);
+                alert("Could not update customer status");
+            }
+        }
+
+        async function toggleHistory(saleId) {
+            const row = document.getElementById(`history-row-${saleId}`);
+            const box = document.getElementById(`history-box-${saleId}`);
+
+            if (row.style.display === "none") {
+                row.style.display = "table-row";
+
+                try {
+                    const res = await fetch(`/collectors/payment-history/${saleId}`);
+                    const data = await res.json();
+
+                    if (!res.ok) {
+                        box.innerHTML = data.message || "Failed to load payment history";
+                        return;
+                    }
+
+                    if (data.length === 0) {
+                        box.innerHTML = "No payment history found.";
+                        return;
+                    }
+
+                    let html = `
+                        <table style="width:100%; border-collapse:collapse;">
+                            <thead>
+                                <tr>
+                                    <th style="text-align:left; padding:6px; border-bottom:1px solid #ddd;">Customer ID</th>
+                                    <th style="text-align:left; padding:6px; border-bottom:1px solid #ddd;">Amount</th>
+                                    <th style="text-align:left; padding:6px; border-bottom:1px solid #ddd;">Payment Date</th>
+                                    <th style="text-align:left; padding:6px; border-bottom:1px solid #ddd;">Type</th>
+                                    <th style="text-align:left; padding:6px; border-bottom:1px solid #ddd;">Action</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                    `;
+
+                    data.forEach(payment => {
+                        html += `
+                            <tr>
+                                <td style="padding:6px; border-bottom:1px solid #eee;">${payment.customer_id}</td>
+                                <td style="padding:6px; border-bottom:1px solid #eee;">${payment.amount}</td>
+                                <td style="padding:6px; border-bottom:1px solid #eee;">${payment.payment_date}</td>
+                                <td style="padding:6px; border-bottom:1px solid #eee;">${payment.payment_type}</td>
+                                <td style="padding:6px; border-bottom:1px solid #eee;">
+                                    <button class="edit-btn" type="button" onclick="togglePaymentEdit(${payment.payment_id})">Edit Payment</button>
+                                </td>
+                            </tr>
+
+                            <tr id="payment-edit-row-${payment.payment_id}" style="display:none;">
+                                <td colspan="5" style="padding:10px; background:#f8fafc;">
+                                    <div class="payment-edit-grid">
+                                        <div>
+                                            <label>Amount</label>
+                                            <input type="number" id="payment-amount-${payment.payment_id}" min="0.01" step="0.01" value="${payment.amount}">
+                                        </div>
+
+                                        <div>
+                                            <label>Payment Date</label>
+                                            <input type="date" id="payment-date-${payment.payment_id}" value="${payment.payment_date}">
+                                        </div>
+
+                                        <div>
+                                            <label>Type</label>
+                                            <select id="payment-type-${payment.payment_id}">
+                                                <option value="regular" ${payment.payment_type === "regular" ? "selected" : ""}>regular</option>
+                                                <option value="downpayment" ${payment.payment_type === "downpayment" ? "selected" : ""}>downpayment</option>
+                                            </select>
+                                        </div>
+
+                                        <div>
+                                            <button class="save-btn" type="button" onclick="savePaymentEdit(${payment.payment_id})">Save Payment</button>
+                                        </div>
+                                    </div>
+                                </td>
+                            </tr>
+                        `;
+                    });
+
+                    html += `</tbody></table>`;
+                    box.innerHTML = html;
+                } catch (error) {
+                    console.log(error);
+                    box.innerHTML = "Could not load payment history.";
+                }
+            } else {
+                row.style.display = "none";
+            }
+        }
+
+        function togglePaymentEdit(paymentId) {
+            const row = document.getElementById(`payment-edit-row-${paymentId}`);
+            row.style.display = row.style.display === "none" ? "table-row" : "none";
+        }
+
+        async function savePaymentEdit(paymentId) {
+            const amount = document.getElementById(`payment-amount-${paymentId}`).value;
+            const payment_date = document.getElementById(`payment-date-${paymentId}`).value;
+            const payment_type = document.getElementById(`payment-type-${paymentId}`).value;
+
+            if (!amount || !payment_date || !payment_type) {
+                alert("Please complete amount, payment date, and type");
+                return;
+            }
+
+            try {
+                const res = await fetch(`/collectors/payment-history/${paymentId}`, {
+                    method: "PUT",
+                    headers: {
+                        "Content-Type": "application/json"
+                    },
+                    body: JSON.stringify({
+                        amount,
+                        payment_date,
+                        payment_type
+                    })
+                });
+
+                const data = await res.json();
+
+                if (!res.ok) {
+                    alert(data.message || "Failed to update payment");
+                    return;
+                }
+
+                alert("Payment updated successfully");
+                await loadCustomerSales();
+            } catch (error) {
+                console.log(error);
+                alert("Could not update payment");
+            }
+        }
+
+        filterBtn.addEventListener("click", loadCustomerSales);
+
+        showAllBtn.addEventListener("click", async () => {
+            collectorFilter.value = "";
+            await loadCustomerSales();
+        });
+
+        async function initPage() {
+            await loadCollectors();
+            await loadItems();
+            await loadCustomerSales();
+        }
+
+        initPage();
+    </script>
+</body>
+</html>

@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Expenses</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background: #f7f7f7;
+        }
+
+        h1 {
+            margin-bottom: 10px;
+        }
+
+        .main-layout {
+            display: grid;
+            grid-template-columns: 1fr 1.3fr;
+            gap: 20px;
+            align-items: start;
+        }
+
+        .card {
+            background: white;
+            border: 1px solid #ddd;
+            border-radius: 12px;
+            padding: 20px;
+        }
+
+        label {
+            display: block;
+            font-weight: bold;
+            margin-top: 12px;
+            margin-bottom: 6px;
+        }
+
+        input, select, textarea {
+            width: 100%;
+            padding: 10px;
+            font-size: 15px;
+            border: 1px solid #bbb;
+            border-radius: 6px;
+            box-sizing: border-box;
+        }
+
+        textarea {
+            min-height: 90px;
+            resize: vertical;
+        }
+
+        button {
+            margin-top: 16px;
+            padding: 10px 18px;
+            border: none;
+            border-radius: 8px;
+            background: #2563eb;
+            color: white;
+            cursor: pointer;
+            font-size: 15px;
+        }
+
+        button:hover {
+            background: #1d4ed8;
+        }
+
+        .summary {
+            margin-top: 20px;
+            padding: 15px;
+            background: #f3f3f3;
+            border-radius: 8px;
+            font-size: 18px;
+        }
+
+        .table-wrap {
+            max-height: 700px;
+            overflow: auto;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            min-width: 1200px;
+        }
+
+        th, td {
+            padding: 10px;
+            border-bottom: 1px solid #ddd;
+            text-align: left;
+            white-space: nowrap;
+            vertical-align: top;
+        }
+
+        th {
+            background: #f1f5f9;
+            position: sticky;
+            top: 0;
+        }
+
+        .notes-cell {
+            white-space: normal;
+            min-width: 220px;
+        }
+
+        @media (max-width: 1100px) {
+            .main-layout {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <h1>Expenses</h1>
+    <p><a href="/">Back to Home</a></p>
+
+    <div class="main-layout">
+        <div class="card">
+            <h2>Input Expenses</h2>
+
+            <form id="expenseForm">
+                <label>Date</label>
+                <input type="date" id="expense_date" required>
+
+                <label>Driver Daily Wage</label>
+                <input type="number" id="driver_daily_wage" step="0.01" min="0" value="0">
+
+                <label>Staffs Food Allowance</label>
+                <input type="number" id="staffs_food_allowance" step="0.01" min="0" value="0">
+
+                <label>Gasoline</label>
+                <input type="number" id="gasoline" step="0.01" min="0" value="0">
+
+                <label>Miscellaneous</label>
+                <input type="number" id="miscellaneous" step="0.01" min="0" value="0">
+
+                <label>Under whose collector</label>
+                <select id="collector_id" required>
+                    <option value="">Select collector</option>
+                </select>
+
+                <label>Route</label>
+                <input type="text" id="route" placeholder="Example: Zone 1 / Barangay San Jose">
+
+                <label>Expense Type</label>
+                <select id="expense_type">
+                    <option value="daily">daily</option>
+                    <option value="special">special</option>
+                </select>
+
+                <label>Notes</label>
+                <textarea id="notes" placeholder="Optional remarks"></textarea>
+
+                <div class="summary">
+                    <strong>Total Expense: ₱<span id="totalExpense">0.00</span></strong>
+                </div>
+
+                <button type="submit">Save Expense</button>
+            </form>
+        </div>
+
+        <div class="card">
+            <h2>Expenses List</h2>
+
+            <div class="table-wrap">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Collector</th>
+                            <th>Driver Daily Wage</th>
+                            <th>Staffs Food Allowance</th>
+                            <th>Gasoline</th>
+                            <th>Miscellaneous</th>
+                            <th>Total Expense</th>
+                            <th>Route</th>
+                            <th>Expense Type</th>
+                            <th>Notes</th>
+                        </tr>
+                    </thead>
+                    <tbody id="expensesTableBody"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const form = document.getElementById("expenseForm");
+        const collectorSelect = document.getElementById("collector_id");
+        const expensesTableBody = document.getElementById("expensesTableBody");
+        const totalExpenseText = document.getElementById("totalExpense");
+
+        const driverInput = document.getElementById("driver_daily_wage");
+        const foodInput = document.getElementById("staffs_food_allowance");
+        const gasInput = document.getElementById("gasoline");
+        const miscInput = document.getElementById("miscellaneous");
+        const dateInput = document.getElementById("expense_date");
+
+        function setTodayDate() {
+            const today = new Date().toISOString().split("T")[0];
+            dateInput.value = today;
+        }
+
+        function updateTotalExpense() {
+            const driver = Number(driverInput.value) || 0;
+            const food = Number(foodInput.value) || 0;
+            const gas = Number(gasInput.value) || 0;
+            const misc = Number(miscInput.value) || 0;
+
+            const total = driver + food + gas + misc;
+            totalExpenseText.textContent = total.toFixed(2);
+        }
+
+        async function loadCollectors() {
+            try {
+                const res = await fetch("/expenses/collectors");
+                const data = await res.json();
+
+                if (!res.ok) {
+                    alert(data.message || "Failed to load collectors");
+                    return;
+                }
+
+                collectorSelect.innerHTML = `<option value="">Select collector</option>`;
+
+                data.forEach(collector => {
+                    collectorSelect.innerHTML += `
+                        <option value="${collector.id}">
+                            ${collector.id} - ${collector.name}
+                        </option>
+                    `;
+                });
+            } catch (error) {
+                console.log(error);
+                alert("Could not load collectors");
+            }
+        }
+
+        async function loadExpenses() {
+            try {
+                const res = await fetch("/expenses");
+                const data = await res.json();
+
+                if (!res.ok) {
+                    alert(data.message || "Failed to load expenses");
+                    return;
+                }
+
+                expensesTableBody.innerHTML = "";
+
+                data.forEach(expense => {
+                    expensesTableBody.innerHTML += `
+                        <tr>
+                            <td>${expense.expense_date}</td>
+                            <td>${expense.collector_name}</td>
+                            <td>${expense.driver_daily_wage}</td>
+                            <td>${expense.staffs_food_allowance}</td>
+                            <td>${expense.gasoline}</td>
+                            <td>${expense.miscellaneous}</td>
+                            <td>${expense.total_expense}</td>
+                            <td>${expense.route || ""}</td>
+                            <td>${expense.expense_type || ""}</td>
+                            <td class="notes-cell">${expense.notes || ""}</td>
+                        </tr>
+                    `;
+                });
+            } catch (error) {
+                console.log(error);
+                alert("Could not load expenses");
+            }
+        }
+
+        form.addEventListener("submit", async function(e) {
+            e.preventDefault();
+
+            const payload = {
+                expense_date: dateInput.value,
+                driver_daily_wage: driverInput.value,
+                staffs_food_allowance: foodInput.value,
+                gasoline: gasInput.value,
+                miscellaneous: miscInput.value,
+                collector_id: collectorSelect.value,
+                route: document.getElementById("route").value,
+                expense_type: document.getElementById("expense_type").value,
+                notes: document.getElementById("notes").value
+            };
+
+            try {
+                const response = await fetch("/expenses", {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json"
+                    },
+                    body: JSON.stringify(payload)
+                });
+
+                const result = await response.json();
+
+                if (!response.ok) {
+                    alert(result.message || "Failed to save expense");
+                    return;
+                }
+
+                alert("Expense saved successfully");
+
+                form.reset();
+                setTodayDate();
+                driverInput.value = 0;
+                foodInput.value = 0;
+                gasInput.value = 0;
+                miscInput.value = 0;
+                updateTotalExpense();
+
+                await loadExpenses();
+            } catch (error) {
+                console.log(error);
+                alert("Could not save expense");
+            }
+        });
+
+        driverInput.addEventListener("input", updateTotalExpense);
+        foodInput.addEventListener("input", updateTotalExpense);
+        gasInput.addEventListener("input", updateTotalExpense);
+        miscInput.addEventListener("input", updateTotalExpense);
+
+        setTodayDate();
+        updateTotalExpense();
+        loadCollectors();
+        loadExpenses();
+    </script>
+</body>
+</html>

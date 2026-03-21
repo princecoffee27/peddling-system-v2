@@ -1,0 +1,396 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Collectors</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background: #f7f7f7;
+        }
+
+        h1 {
+            margin-bottom: 10px;
+        }
+
+        .card {
+            background: white;
+            border: 1px solid #ddd;
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 20px;
+            max-width: 1200px;
+        }
+
+        .form-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 14px 18px;
+            max-width: 900px;
+        }
+
+        .field {
+            display: flex;
+            flex-direction: column;
+        }
+
+        label {
+            display: block;
+            font-weight: bold;
+            margin-bottom: 6px;
+        }
+
+        input {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #bbb;
+            border-radius: 6px;
+            font-size: 15px;
+            box-sizing: border-box;
+        }
+
+        .button-row {
+            margin-top: 16px;
+        }
+
+        button {
+            padding: 10px 18px;
+            border: none;
+            border-radius: 8px;
+            background: #2563eb;
+            color: white;
+            cursor: pointer;
+            font-size: 15px;
+            margin-right: 8px;
+        }
+
+        button:hover {
+            background: #1d4ed8;
+        }
+
+        .secondary-btn {
+            background: #64748b;
+        }
+
+        .secondary-btn:hover {
+            background: #475569;
+        }
+
+        .edit-btn {
+            background: #16a34a;
+        }
+
+        .edit-btn:hover {
+            background: #15803d;
+        }
+
+        .toggle-btn {
+            background: #f59e0b;
+            color: white;
+        }
+
+        .toggle-btn:hover {
+            background: #d97706;
+        }
+
+        .active-btn {
+            background: #16a34a;
+        }
+
+        .active-btn:hover {
+            background: #15803d;
+        }
+
+        .table-wrap {
+            max-height: 550px;
+            overflow-y: auto;
+            overflow-x: auto;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            background: white;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            min-width: 1000px;
+        }
+
+        th, td {
+            padding: 10px;
+            border-bottom: 1px solid #ddd;
+            text-align: left;
+            white-space: nowrap;
+        }
+
+        th {
+            background: #f1f5f9;
+            position: sticky;
+            top: 0;
+            z-index: 1;
+        }
+
+        .inactive-row {
+            background: #fef2f2;
+        }
+
+        .muted {
+            color: #666;
+            margin-top: 4px;
+        }
+
+        @media (max-width: 900px) {
+            .form-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <h1>Collectors</h1>
+
+    <p><a href="/">Back to Home</a></p>
+
+    <div class="card">
+        <h2 id="formTitle">Add Collector</h2>
+        <p class="muted" id="formHint">Enter collector details below.</p>
+
+        <form id="collectorForm">
+            <div class="form-grid">
+                <div class="field">
+                    <label>Collector ID</label>
+                    <input type="number" id="id" required>
+                </div>
+
+                <div class="field">
+                    <label>Name</label>
+                    <input type="text" id="name" required>
+                </div>
+
+                <div class="field">
+                    <label>Phone</label>
+                    <input type="text" id="phone">
+                </div>
+
+                <div class="field">
+                    <label>Address</label>
+                    <input type="text" id="address">
+                </div>
+
+                <div class="field">
+                    <label>Commission Percent</label>
+                    <input type="number" id="commission_percent" step="0.01" min="0" required>
+                </div>
+            </div>
+
+            <div class="button-row">
+                <button type="submit" id="saveBtn">Save Collector</button>
+                <button type="button" id="cancelEditBtn" class="secondary-btn" style="display:none;">Cancel Edit</button>
+            </div>
+        </form>
+    </div>
+
+    <div class="card">
+        <h2>Collector List</h2>
+        <p class="muted">Scrollable table for many collector records.</p>
+
+        <div class="table-wrap">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Collector ID</th>
+                        <th>Name</th>
+                        <th>Phone</th>
+                        <th>Address</th>
+                        <th>Commission %</th>
+                        <th>Status</th>
+                        <th>Action</th>
+                    </tr>
+                </thead>
+                <tbody id="collectorTableBody"></tbody>
+            </table>
+        </div>
+    </div>
+
+    <script>
+        const form = document.getElementById("collectorForm");
+        const tableBody = document.getElementById("collectorTableBody");
+        const formTitle = document.getElementById("formTitle");
+        const formHint = document.getElementById("formHint");
+        const saveBtn = document.getElementById("saveBtn");
+        const cancelEditBtn = document.getElementById("cancelEditBtn");
+
+        let editingCollectorId = null;
+
+        function resetForm() {
+            form.reset();
+            editingCollectorId = null;
+            document.getElementById("id").disabled = false;
+            formTitle.textContent = "Add Collector";
+            formHint.textContent = "Enter collector details below.";
+            saveBtn.textContent = "Save Collector";
+            cancelEditBtn.style.display = "none";
+        }
+
+        async function loadCollectors() {
+            try {
+                const res = await fetch("/collectors");
+                const data = await res.json();
+
+                if (!res.ok) {
+                    alert(data.message || "Failed to load collectors");
+                    return;
+                }
+
+                tableBody.innerHTML = "";
+
+                data.forEach(collector => {
+                    const rowClass = Number(collector.is_active) === 1 ? "" : "inactive-row";
+                    const statusText = Number(collector.is_active) === 1 ? "Active" : "Inactive";
+                    const toggleText = Number(collector.is_active) === 1 ? "Deactivate" : "Activate";
+                    const toggleClass = Number(collector.is_active) === 1 ? "toggle-btn" : "active-btn";
+
+                    tableBody.innerHTML += `
+                        <tr class="${rowClass}">
+                            <td>${collector.id}</td>
+                            <td>${collector.name}</td>
+                            <td>${collector.phone || ""}</td>
+                            <td>${collector.address || ""}</td>
+                            <td>${collector.commission_percent}</td>
+                            <td>${statusText}</td>
+                            <td>
+                                <button
+                                    class="edit-btn"
+                                    type="button"
+                                    onclick='editCollector(${JSON.stringify(collector.id)}, ${JSON.stringify(collector.name)}, ${JSON.stringify(collector.phone || "")}, ${JSON.stringify(collector.address || "")}, ${JSON.stringify(collector.commission_percent)})'>
+                                    Edit
+                                </button>
+                                <button
+                                    class="${toggleClass}"
+                                    type="button"
+                                    onclick="toggleCollector(${collector.id})">
+                                    ${toggleText}
+                                </button>
+                            </td>
+                        </tr>
+                    `;
+                });
+            } catch (error) {
+                console.log(error);
+                alert("Could not load collectors");
+            }
+        }
+
+        function editCollector(id, name, phone, address, commission_percent) {
+            editingCollectorId = id;
+
+            document.getElementById("id").value = id;
+            document.getElementById("name").value = name;
+            document.getElementById("phone").value = phone;
+            document.getElementById("address").value = address;
+            document.getElementById("commission_percent").value = commission_percent;
+
+            document.getElementById("id").disabled = true;
+            formTitle.textContent = "Edit Collector";
+            formHint.textContent = `You are editing collector ID ${id}.`;
+            saveBtn.textContent = "Update Collector";
+            cancelEditBtn.style.display = "inline-block";
+
+            window.scrollTo({ top: 0, behavior: "smooth" });
+        }
+
+        async function toggleCollector(id) {
+            const confirmed = confirm("Are you sure you want to change this collector's status?");
+
+            if (!confirmed) return;
+
+            try {
+                const res = await fetch(`/collectors/${id}/toggle`, {
+                    method: "PUT"
+                });
+
+                const data = await res.json();
+
+                if (!res.ok) {
+                    alert(data.message || "Failed to update status");
+                    return;
+                }
+
+                alert("Collector status updated successfully");
+
+                if (editingCollectorId === id) {
+                    resetForm();
+                }
+
+                loadCollectors();
+            } catch (error) {
+                console.log(error);
+                alert("Could not update collector status");
+            }
+        }
+
+        form.addEventListener("submit", async (e) => {
+            e.preventDefault();
+
+            const id = document.getElementById("id").value;
+            const name = document.getElementById("name").value;
+            const phone = document.getElementById("phone").value;
+            const address = document.getElementById("address").value;
+            const commission_percent = document.getElementById("commission_percent").value;
+
+            try {
+                let response;
+
+                if (editingCollectorId === null) {
+                    response = await fetch("/collectors", {
+                        method: "POST",
+                        headers: {
+                            "Content-Type": "application/json"
+                        },
+                        body: JSON.stringify({
+                            id,
+                            name,
+                            phone,
+                            address,
+                            commission_percent
+                        })
+                    });
+                } else {
+                    response = await fetch(`/collectors/${editingCollectorId}`, {
+                        method: "PUT",
+                        headers: {
+                            "Content-Type": "application/json"
+                        },
+                        body: JSON.stringify({
+                            name,
+                            phone,
+                            address,
+                            commission_percent
+                        })
+                    });
+                }
+
+                const result = await response.json();
+
+                if (!response.ok) {
+                    alert(result.message || "Failed to save collector");
+                    return;
+                }
+
+                alert(editingCollectorId === null ? "Collector added successfully" : "Collector updated successfully");
+                resetForm();
+                loadCollectors();
+            } catch (error) {
+                console.log(error);
+                alert("Could not save collector");
+            }
+        });
+
+        cancelEditBtn.addEventListener("click", resetForm);
+
+        loadCollectors();
+    </script>
+</body>
+</html>

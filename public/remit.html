@@ -1,0 +1,652 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Remit Page</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background: #f7f7f7;
+        }
+
+        h1, h2, h3 {
+            margin-bottom: 10px;
+        }
+
+        .card {
+            background: white;
+            border: 1px solid #ddd;
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+
+        .top-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr 1fr 1fr;
+            gap: 12px;
+            align-items: end;
+        }
+
+        .main-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            align-items: start;
+        }
+
+        label {
+            display: block;
+            font-weight: bold;
+            margin-bottom: 6px;
+        }
+
+        input, select, textarea {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #bbb;
+            border-radius: 6px;
+            box-sizing: border-box;
+            font-size: 15px;
+        }
+
+        textarea {
+            min-height: 90px;
+            resize: vertical;
+        }
+
+        button {
+            padding: 10px 16px;
+            border: none;
+            border-radius: 8px;
+            background: #2563eb;
+            color: white;
+            cursor: pointer;
+        }
+
+        button:hover {
+            background: #1d4ed8;
+        }
+
+        .secondary-btn {
+            background: #64748b;
+        }
+
+        .secondary-btn:hover {
+            background: #475569;
+        }
+
+        .add-btn {
+            background: #16a34a;
+        }
+
+        .add-btn:hover {
+            background: #15803d;
+        }
+
+        .remove-btn {
+            background: #dc2626;
+        }
+
+        .remove-btn:hover {
+            background: #b91c1c;
+        }
+
+        .table-wrap {
+            max-height: 420px;
+            overflow: auto;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            min-width: 950px;
+        }
+
+        th, td {
+            padding: 10px;
+            border-bottom: 1px solid #ddd;
+            text-align: left;
+            white-space: nowrap;
+        }
+
+        th {
+            background: #f1f5f9;
+            position: sticky;
+            top: 0;
+        }
+
+        .summary-box {
+            background: #f3f4f6;
+            padding: 15px;
+            border-radius: 10px;
+            margin-top: 15px;
+        }
+
+        .summary-box p {
+            margin: 8px 0;
+            font-weight: bold;
+        }
+
+        .form-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px 16px;
+        }
+
+        .full-width {
+            grid-column: 1 / -1;
+        }
+
+        @media (max-width: 1100px) {
+            .main-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .top-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .form-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <h1>Remit Page</h1>
+    <p><a href="/">Back to Home</a></p>
+
+    <div class="card">
+        <h2>Search Payments</h2>
+
+        <div class="top-grid">
+            <div>
+                <label>Customer ID From</label>
+                <input type="number" id="customer_id_from">
+            </div>
+
+            <div>
+                <label>Customer ID To</label>
+                <input type="number" id="customer_id_to">
+            </div>
+
+            <div>
+                <label>Payment Date From</label>
+                <input type="date" id="payment_date_from">
+            </div>
+
+            <div>
+                <label>Payment Date To</label>
+                <input type="date" id="payment_date_to">
+            </div>
+
+            <div>
+                <label>Under whose collector</label>
+                <select id="collector_id_search">
+                    <option value="">Select collector</option>
+                </select>
+            </div>
+        </div>
+
+        <div style="margin-top: 15px;">
+            <button id="searchBtn">Search</button>
+            <button id="clearBtn" class="secondary-btn" type="button">Clear</button>
+        </div>
+    </div>
+
+    <div class="main-grid">
+        <div class="card">
+            <h2>Search Results</h2>
+            <p>Select payments to add to remit.</p>
+
+            <div class="table-wrap">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Payment ID</th>
+                            <th>Customer ID</th>
+                            <th>Customer Name</th>
+                            <th>Collector</th>
+                            <th>Amount</th>
+                            <th>Payment Date</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody id="searchResultsBody"></tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="card">
+            <h2>Selected Payments</h2>
+            <p>This area is independent from search results.</p>
+
+            <div class="table-wrap">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Payment ID</th>
+                            <th>Customer ID</th>
+                            <th>Customer Name</th>
+                            <th>Collector</th>
+                            <th>Amount</th>
+                            <th>Payment Date</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody id="selectedPaymentsBody"></tbody>
+                </table>
+            </div>
+
+            <div class="summary-box">
+                <p>Total Selected Payments: ₱<span id="totalSelectedPayments">0.00</span></p>
+            </div>
+
+            <h3 style="margin-top: 20px;">Remit Details</h3>
+
+            <div class="form-grid">
+                <div>
+                    <label>Remit Date</label>
+                    <input type="date" id="remit_date">
+                </div>
+
+                <div>
+                    <label>Collector ID</label>
+                    <input type="text" id="collector_id_auto" readonly>
+                </div>
+
+                <div>
+                    <label>Commission Percentage</label>
+                    <input type="text" id="commission_percent_auto" readonly>
+                </div>
+
+                <div>
+                    <label>Gas</label>
+                    <input type="number" id="gas" step="0.01" min="0" value="0">
+                </div>
+
+                <div>
+                    <label>Food</label>
+                    <input type="number" id="food" step="0.01" min="0" value="0">
+                </div>
+
+                <div>
+                    <label>Miscellaneous</label>
+                    <input type="number" id="miscellaneous" step="0.01" min="0" value="0">
+                </div>
+
+                <div>
+                    <label>Cash On Hand Given To Me</label>
+                    <input type="number" id="cash_on_hand" step="0.01" min="0" value="0">
+                </div>
+
+                <div class="full-width">
+                    <label>Notes</label>
+                    <textarea id="notes"></textarea>
+                </div>
+            </div>
+
+            <div class="summary-box">
+                <p>Total Expenses: ₱<span id="totalExpenses">0.00</span></p>
+                <p>Commission Amount: ₱<span id="commissionAmount">0.00</span></p>
+                <p>Gross Total: ₱<span id="grossTotal">0.00</span></p>
+                <p>Net Total: ₱<span id="netTotal">0.00</span></p>
+                <p>Positive / Negative Money: ₱<span id="varianceAmount">0.00</span></p>
+            </div>
+
+            <div style="margin-top: 15px;">
+                <button id="saveRemitBtn">Save Remit</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>Saved Remits</h2>
+
+        <div class="table-wrap">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Remit ID</th>
+                        <th>Collector</th>
+                        <th>Remit Date</th>
+                        <th>Total Selected Payments</th>
+                        <th>Gas</th>
+                        <th>Food</th>
+                        <th>Miscellaneous</th>
+                        <th>Commission %</th>
+                        <th>Commission Amount</th>
+                        <th>Gross Total</th>
+                        <th>Cash On Hand</th>
+                        <th>Net Total</th>
+                        <th>Positive/Negative</th>
+                    </tr>
+                </thead>
+                <tbody id="remitsHistoryBody"></tbody>
+            </table>
+        </div>
+    </div>
+
+    <script>
+        const collectorSearchSelect = document.getElementById("collector_id_search");
+        const searchResultsBody = document.getElementById("searchResultsBody");
+        const selectedPaymentsBody = document.getElementById("selectedPaymentsBody");
+        const remitsHistoryBody = document.getElementById("remitsHistoryBody");
+
+        const totalSelectedPaymentsText = document.getElementById("totalSelectedPayments");
+        const totalExpensesText = document.getElementById("totalExpenses");
+        const commissionAmountText = document.getElementById("commissionAmount");
+        const grossTotalText = document.getElementById("grossTotal");
+        const netTotalText = document.getElementById("netTotal");
+        const varianceAmountText = document.getElementById("varianceAmount");
+
+        const collectorIdAuto = document.getElementById("collector_id_auto");
+        const commissionPercentAuto = document.getElementById("commission_percent_auto");
+
+        const gasInput = document.getElementById("gas");
+        const foodInput = document.getElementById("food");
+        const miscInput = document.getElementById("miscellaneous");
+        const cashOnHandInput = document.getElementById("cash_on_hand");
+        const remitDateInput = document.getElementById("remit_date");
+
+        let collectors = [];
+        let searchResults = [];
+        let selectedItems = [];
+
+        function setTodayDate() {
+            const today = new Date().toISOString().split("T")[0];
+            remitDateInput.value = today;
+        }
+
+        async function loadCollectors() {
+            const res = await fetch("/remits/collectors");
+            const data = await res.json();
+
+            if (!res.ok) {
+                alert(data.message || "Failed to load collectors");
+                return;
+            }
+
+            collectors = data;
+            collectorSearchSelect.innerHTML = `<option value="">Select collector</option>`;
+
+            data.forEach(collector => {
+                collectorSearchSelect.innerHTML += `
+                    <option value="${collector.id}">
+                        ${collector.id} - ${collector.name}
+                    </option>
+                `;
+            });
+        }
+
+        async function searchPayments() {
+            const params = new URLSearchParams();
+
+            const customerIdFrom = document.getElementById("customer_id_from").value;
+            const customerIdTo = document.getElementById("customer_id_to").value;
+            const paymentDateFrom = document.getElementById("payment_date_from").value;
+            const paymentDateTo = document.getElementById("payment_date_to").value;
+            const collectorId = collectorSearchSelect.value;
+
+            if (customerIdFrom) params.append("customer_id_from", customerIdFrom);
+            if (customerIdTo) params.append("customer_id_to", customerIdTo);
+            if (paymentDateFrom) params.append("payment_date_from", paymentDateFrom);
+            if (paymentDateTo) params.append("payment_date_to", paymentDateTo);
+            if (collectorId) params.append("collector_id", collectorId);
+
+            const res = await fetch(`/remits/search?${params.toString()}`);
+            const data = await res.json();
+
+            if (!res.ok) {
+                alert(data.message || "Failed to search payments");
+                return;
+            }
+
+            searchResults = data;
+            renderSearchResults();
+            syncCollectorAutoFields();
+        }
+
+        function renderSearchResults() {
+            searchResultsBody.innerHTML = "";
+
+            if (searchResults.length === 0) {
+                searchResultsBody.innerHTML = `
+                    <tr><td colspan="7">No matching payments found.</td></tr>
+                `;
+                return;
+            }
+
+            searchResults.forEach(item => {
+                searchResultsBody.innerHTML += `
+                    <tr>
+                        <td>${item.payment_id}</td>
+                        <td>${item.customer_id}</td>
+                        <td>${item.customer_name}</td>
+                        <td>${item.collector_name || ""}</td>
+                        <td>${item.amount}</td>
+                        <td>${item.payment_date}</td>
+                        <td>
+                            <button class="add-btn" onclick="addToSelected(${item.payment_id})">Add</button>
+                        </td>
+                    </tr>
+                `;
+            });
+        }
+
+        function renderSelectedItems() {
+            selectedPaymentsBody.innerHTML = "";
+
+            if (selectedItems.length === 0) {
+                selectedPaymentsBody.innerHTML = `
+                    <tr><td colspan="7">No selected payments yet.</td></tr>
+                `;
+            } else {
+                selectedItems.forEach(item => {
+                    selectedPaymentsBody.innerHTML += `
+                        <tr>
+                            <td>${item.payment_id}</td>
+                            <td>${item.customer_id}</td>
+                            <td>${item.customer_name}</td>
+                            <td>${item.collector_name || ""}</td>
+                            <td>${item.amount}</td>
+                            <td>${item.payment_date}</td>
+                            <td>
+                                <button class="remove-btn" onclick="removeSelected(${item.payment_id})">Remove</button>
+                            </td>
+                        </tr>
+                    `;
+                });
+            }
+
+            computeSummary();
+        }
+
+        function addToSelected(paymentId) {
+            const item = searchResults.find(x => Number(x.payment_id) === Number(paymentId));
+            if (!item) return;
+
+            const exists = selectedItems.some(x => Number(x.payment_id) === Number(paymentId));
+            if (exists) return;
+
+            selectedItems.push(item);
+            renderSelectedItems();
+        }
+
+        function removeSelected(paymentId) {
+            selectedItems = selectedItems.filter(x => Number(x.payment_id) !== Number(paymentId));
+            renderSelectedItems();
+        }
+
+        function syncCollectorAutoFields() {
+            const selectedCollectorId = collectorSearchSelect.value;
+
+            if (!selectedCollectorId) {
+                collectorIdAuto.value = "";
+                commissionPercentAuto.value = "";
+                computeSummary();
+                return;
+            }
+
+            const collector = collectors.find(c => String(c.id) === String(selectedCollectorId));
+
+            if (collector) {
+                collectorIdAuto.value = collector.id;
+                commissionPercentAuto.value = collector.commission_percent;
+            } else {
+                collectorIdAuto.value = "";
+                commissionPercentAuto.value = "";
+            }
+
+            computeSummary();
+        }
+
+        function computeSummary() {
+            const totalSelectedPayments = selectedItems.reduce((sum, item) => {
+                return sum + (Number(item.amount) || 0);
+            }, 0);
+
+            const gas = Number(gasInput.value) || 0;
+            const food = Number(foodInput.value) || 0;
+            const misc = Number(miscInput.value) || 0;
+            const cashOnHand = Number(cashOnHandInput.value) || 0;
+            const commissionPercent = Number(commissionPercentAuto.value) || 0;
+
+            const totalExpenses = gas + food + misc;
+            const commissionAmount = (totalSelectedPayments - totalExpenses) * (commissionPercent / 100);
+            const grossTotal = totalSelectedPayments - commissionAmount;
+            const netTotal = cashOnHand - commissionAmount;
+            const varianceAmount = grossTotal - netTotal;
+
+            totalSelectedPaymentsText.textContent = totalSelectedPayments.toFixed(2);
+            totalExpensesText.textContent = totalExpenses.toFixed(2);
+            commissionAmountText.textContent = commissionAmount.toFixed(2);
+            grossTotalText.textContent = grossTotal.toFixed(2);
+            netTotalText.textContent = netTotal.toFixed(2);
+            varianceAmountText.textContent = varianceAmount.toFixed(2);
+        }
+
+        async function saveRemit() {
+            if (!collectorIdAuto.value) {
+                alert("Please choose a collector in the search box first.");
+                return;
+            }
+
+            if (selectedItems.length === 0) {
+                alert("Please add at least one payment to the selected area.");
+                return;
+            }
+
+            const payload = {
+                collector_id: collectorIdAuto.value,
+                remit_date: remitDateInput.value,
+                payment_date_from: document.getElementById("payment_date_from").value,
+                payment_date_to: document.getElementById("payment_date_to").value,
+                customer_id_from: document.getElementById("customer_id_from").value,
+                customer_id_to: document.getElementById("customer_id_to").value,
+                selected_items: selectedItems,
+                gas: gasInput.value,
+                food: foodInput.value,
+                miscellaneous: miscInput.value,
+                commission_percent: commissionPercentAuto.value,
+                cash_on_hand: cashOnHandInput.value,
+                notes: document.getElementById("notes").value
+            };
+
+            const res = await fetch("/remits", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify(payload)
+            });
+
+            const data = await res.json();
+
+            if (!res.ok) {
+                alert(data.message || "Failed to save remit");
+                return;
+            }
+
+            alert("Remit saved successfully");
+
+            selectedItems = [];
+            renderSelectedItems();
+
+            gasInput.value = 0;
+            foodInput.value = 0;
+            miscInput.value = 0;
+            cashOnHandInput.value = 0;
+            document.getElementById("notes").value = "";
+
+            await searchPayments();
+            await loadRemitsHistory();
+        }
+
+        async function loadRemitsHistory() {
+            const res = await fetch("/remits");
+            const data = await res.json();
+
+            if (!res.ok) {
+                alert(data.message || "Failed to load remit history");
+                return;
+            }
+
+            remitsHistoryBody.innerHTML = "";
+
+            data.forEach(remit => {
+                remitsHistoryBody.innerHTML += `
+                    <tr>
+                        <td>${remit.id}</td>
+                        <td>${remit.collector_name}</td>
+                        <td>${remit.remit_date}</td>
+                        <td>${remit.total_selected_payments}</td>
+                        <td>${remit.gas}</td>
+                        <td>${remit.food}</td>
+                        <td>${remit.miscellaneous}</td>
+                        <td>${remit.commission_percent}</td>
+                        <td>${remit.commission_amount}</td>
+                        <td>${remit.gross_total}</td>
+                        <td>${remit.cash_on_hand}</td>
+                        <td>${remit.net_total}</td>
+                        <td>${remit.variance_amount}</td>
+                    </tr>
+                `;
+            });
+        }
+
+        document.getElementById("searchBtn").addEventListener("click", searchPayments);
+
+        document.getElementById("clearBtn").addEventListener("click", () => {
+            document.getElementById("customer_id_from").value = "";
+            document.getElementById("customer_id_to").value = "";
+            document.getElementById("payment_date_from").value = "";
+            document.getElementById("payment_date_to").value = "";
+            collectorSearchSelect.value = "";
+            collectorIdAuto.value = "";
+            commissionPercentAuto.value = "";
+            searchResults = [];
+            renderSearchResults();
+            computeSummary();
+        });
+
+        collectorSearchSelect.addEventListener("change", syncCollectorAutoFields);
+        gasInput.addEventListener("input", computeSummary);
+        foodInput.addEventListener("input", computeSummary);
+        miscInput.addEventListener("input", computeSummary);
+        cashOnHandInput.addEventListener("input", computeSummary);
+        document.getElementById("saveRemitBtn").addEventListener("click", saveRemit);
+
+        setTodayDate();
+        loadCollectors();
+        renderSearchResults();
+        renderSelectedItems();
+        loadRemitsHistory();
+    </script>
+</body>
+</html>

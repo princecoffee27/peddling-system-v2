@@ -1,0 +1,528 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>New Customer with Downpayment</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background: #f7f7f7;
+        }
+
+        h1 {
+            margin-bottom: 10px;
+        }
+
+        .main-layout {
+            display: grid;
+            grid-template-columns: 1.1fr 1.2fr;
+            gap: 20px;
+            align-items: start;
+        }
+
+        .card {
+            background: #fff;
+            border: 1px solid #ddd;
+            border-radius: 12px;
+            padding: 20px;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 18px 24px;
+        }
+
+        .field {
+            display: flex;
+            flex-direction: column;
+        }
+
+        label {
+            font-weight: bold;
+            margin-bottom: 6px;
+        }
+
+        input, select {
+            padding: 10px;
+            font-size: 16px;
+            border: 1px solid #bbb;
+            border-radius: 6px;
+        }
+
+        .summary {
+            margin-top: 20px;
+            padding: 15px;
+            background: #f3f3f3;
+            border-radius: 8px;
+            max-width: 420px;
+        }
+
+        button {
+            margin-top: 20px;
+            padding: 12px 24px;
+            font-size: 16px;
+            cursor: pointer;
+            border: none;
+            border-radius: 8px;
+            background: #2563eb;
+            color: white;
+        }
+
+        button:hover {
+            background: #1d4ed8;
+        }
+
+        .edit-btn {
+            background: #f59e0b;
+        }
+
+        .edit-btn:hover {
+            background: #d97706;
+        }
+
+        .save-btn {
+            background: #16a34a;
+        }
+
+        .save-btn:hover {
+            background: #15803d;
+        }
+
+        .row-top {
+            margin-bottom: 20px;
+        }
+
+        .table-wrap {
+            max-height: 650px;
+            overflow-y: auto;
+            overflow-x: auto;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            min-width: 1350px;
+        }
+
+        th, td {
+            border-bottom: 1px solid #ddd;
+            padding: 10px;
+            text-align: left;
+            white-space: nowrap;
+            vertical-align: top;
+        }
+
+        th {
+            background: #f1f5f9;
+            position: sticky;
+            top: 0;
+            z-index: 1;
+        }
+
+        .small-text {
+            color: #555;
+            margin-top: 6px;
+            margin-bottom: 0;
+        }
+
+        .edit-row {
+            background: #fafafa;
+        }
+
+        .edit-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr 1fr auto;
+            gap: 10px;
+            align-items: end;
+        }
+
+        @media (max-width: 1100px) {
+            .main-layout {
+                grid-template-columns: 1fr;
+            }
+
+            .grid,
+            .edit-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <h1>New Customer + First Downpayment Entry</h1>
+
+    <div class="row-top">
+        <a href="/">Back to Home</a>
+    </div>
+
+    <div class="main-layout">
+        <div class="card">
+            <form id="entryForm">
+                <div class="grid">
+                    <div class="field">
+                        <label>Customer ID</label>
+                        <input type="number" id="customer_id" required>
+                    </div>
+
+                    <div class="field">
+                        <label>Item</label>
+                        <select id="item_id" required>
+                            <option value="">Select item</option>
+                        </select>
+                    </div>
+
+                    <div class="field">
+                        <label>Customer Name</label>
+                        <input type="text" id="customer_name" required>
+                    </div>
+
+                    <div class="field">
+                        <label>Item Quantity</label>
+                        <input type="number" id="item_quantity" min="1" required>
+                    </div>
+
+                    <div class="field">
+                        <label>Customer Address</label>
+                        <input type="text" id="customer_address" required>
+                    </div>
+
+                    <div class="field">
+                        <label>Down Payment</label>
+                        <input type="number" id="downpayment" min="0" step="0.01" required>
+                    </div>
+
+                    <div class="field">
+                        <label>Customer Phone No</label>
+                        <input type="text" id="customer_phone" required>
+                    </div>
+
+                    <div class="field">
+                        <label>Down Payment Date</label>
+                        <input type="date" id="downpayment_date" required>
+                    </div>
+
+                    <div class="field">
+                        <label>Collector ID from List</label>
+                        <select id="collector_id" required>
+                            <option value="">Select collector</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="summary">
+                    <p><strong>Total Amount:</strong> <span id="totalPreview">0.00</span></p>
+                    <p><strong>Remaining Balance:</strong> <span id="balancePreview">0.00</span></p>
+                </div>
+
+                <button type="submit">Save Customer + Sale</button>
+            </form>
+        </div>
+
+        <div class="card">
+            <h2>Saved Customer Sales</h2>
+            <p class="small-text">Newest saved records will appear here automatically.</p>
+
+            <div class="table-wrap">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Customer ID</th>
+                            <th>Customer Name</th>
+                            <th>Customer Address</th>
+                            <th>Customer Phone</th>
+                            <th>Item Bought</th>
+                            <th>Quantity</th>
+                            <th>Down Payment</th>
+                            <th>Down Payment Date</th>
+                            <th>Collector</th>
+                            <th>Remaining Balance</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody id="recordsTableBody"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const itemSelect = document.getElementById("item_id");
+        const itemQuantityInput = document.getElementById("item_quantity");
+        const downpaymentInput = document.getElementById("downpayment");
+        const downpaymentDateInput = document.getElementById("downpayment_date");
+        const collectorSelect = document.getElementById("collector_id");
+        const totalPreview = document.getElementById("totalPreview");
+        const balancePreview = document.getElementById("balancePreview");
+        const entryForm = document.getElementById("entryForm");
+        const recordsTableBody = document.getElementById("recordsTableBody");
+
+        let inventoryItems = [];
+        let collectorsCache = [];
+
+        function setTodayDate() {
+            const today = new Date().toISOString().split("T")[0];
+            downpaymentDateInput.value = today;
+        }
+
+        async function loadCollectors() {
+            try {
+                const res = await fetch("/new-customer-sale/collectors");
+                const data = await res.json();
+
+                if (!res.ok) {
+                    alert(data.message || "Failed to load collectors");
+                    return;
+                }
+
+                collectorsCache = data;
+                collectorSelect.innerHTML = `<option value="">Select collector</option>`;
+
+                data.forEach(collector => {
+                    collectorSelect.innerHTML += `
+                        <option value="${collector.id}">
+                            ${collector.id} - ${collector.name}
+                        </option>
+                    `;
+                });
+            } catch (error) {
+                console.log(error);
+                alert("Could not load collectors");
+            }
+        }
+
+        function collectorOptionsHtml(selectedId) {
+            let html = `<option value="">Select collector</option>`;
+
+            collectorsCache.forEach(collector => {
+                const selected = String(collector.id) === String(selectedId) ? "selected" : "";
+                html += `<option value="${collector.id}" ${selected}>${collector.id} - ${collector.name}</option>`;
+            });
+
+            return html;
+        }
+
+        async function loadItems() {
+            try {
+                const res = await fetch("/new-customer-sale/items");
+                const data = await res.json();
+
+                if (!res.ok) {
+                    alert(data.message || "Failed to load items");
+                    return;
+                }
+
+                inventoryItems = data;
+                itemSelect.innerHTML = `<option value="">Select item</option>`;
+
+                data.forEach(item => {
+                    itemSelect.innerHTML += `
+                        <option value="${item.id}">
+                            ${item.item_name} - ₱${item.selling_price} (Stock: ${item.quantity})
+                        </option>
+                    `;
+                });
+            } catch (error) {
+                console.log(error);
+                alert("Could not load items");
+            }
+        }
+
+        async function loadRecords() {
+            try {
+                const res = await fetch("/new-customer-sale/records");
+                const data = await res.json();
+
+                if (!res.ok) {
+                    alert(data.message || "Failed to load records");
+                    return;
+                }
+
+                recordsTableBody.innerHTML = "";
+
+                data.forEach(record => {
+                    recordsTableBody.innerHTML += `
+                        <tr>
+                            <td>${record.customer_id}</td>
+                            <td>${record.customer_name}</td>
+                            <td>${record.customer_address}</td>
+                            <td>${record.customer_phone}</td>
+                            <td>${record.item_bought}</td>
+                            <td>${record.quantity}</td>
+                            <td>${record.downpayment}</td>
+                            <td>${record.downpayment_date || ""}</td>
+                            <td>${record.collector_name || ""}</td>
+                            <td>${record.balance}</td>
+                            <td>
+                                <button class="edit-btn" type="button" onclick="toggleCustomerEdit(${record.customer_id})">Edit</button>
+                            </td>
+                        </tr>
+
+                        <tr id="edit-row-${record.customer_id}" class="edit-row" style="display:none;">
+                            <td colspan="11">
+                                <div class="edit-grid">
+                                    <div>
+                                        <label>Customer Name</label>
+                                        <input type="text" id="edit-name-${record.customer_id}" value="${record.customer_name || ""}">
+                                    </div>
+
+                                    <div>
+                                        <label>Customer Address</label>
+                                        <input type="text" id="edit-address-${record.customer_id}" value="${record.customer_address || ""}">
+                                    </div>
+
+                                    <div>
+                                        <label>Customer Phone</label>
+                                        <input type="text" id="edit-phone-${record.customer_id}" value="${record.customer_phone || ""}">
+                                    </div>
+
+                                    <div>
+                                        <label>Collector</label>
+                                        <select id="edit-collector-${record.customer_id}">
+                                            ${collectorOptionsHtml(record.collector_id)}
+                                        </select>
+                                    </div>
+
+                                    <div>
+                                        <button class="save-btn" type="button" onclick="saveCustomerEdit(${record.customer_id})">Save Edit</button>
+                                    </div>
+                                </div>
+                            </td>
+                        </tr>
+                    `;
+                });
+            } catch (error) {
+                console.log(error);
+                alert("Could not load saved records");
+            }
+        }
+
+        function toggleCustomerEdit(customerId) {
+            const row = document.getElementById(`edit-row-${customerId}`);
+            row.style.display = row.style.display === "none" ? "table-row" : "none";
+        }
+
+        async function saveCustomerEdit(customerId) {
+            const customer_name = document.getElementById(`edit-name-${customerId}`).value;
+            const customer_address = document.getElementById(`edit-address-${customerId}`).value;
+            const customer_phone = document.getElementById(`edit-phone-${customerId}`).value;
+            const collector_id = document.getElementById(`edit-collector-${customerId}`).value;
+
+            if (!customer_name || !customer_address || !customer_phone || !collector_id) {
+                alert("Please complete customer name, address, phone, and collector");
+                return;
+            }
+
+            try {
+                const res = await fetch(`/new-customer-sale/customer/${customerId}`, {
+                    method: "PUT",
+                    headers: {
+                        "Content-Type": "application/json"
+                    },
+                    body: JSON.stringify({
+                        customer_name,
+                        customer_address,
+                        customer_phone,
+                        collector_id
+                    })
+                });
+
+                const data = await res.json();
+
+                if (!res.ok) {
+                    alert(data.message || "Failed to update customer");
+                    return;
+                }
+
+                alert("Customer updated successfully");
+                await loadRecords();
+            } catch (error) {
+                console.log(error);
+                alert("Could not update customer");
+            }
+        }
+
+        function updatePreview() {
+            const itemId = itemSelect.value;
+            const quantity = Number(itemQuantityInput.value) || 0;
+            const downpayment = Number(downpaymentInput.value) || 0;
+
+            const selectedItem = inventoryItems.find(item => String(item.id) === String(itemId));
+
+            if (!selectedItem) {
+                totalPreview.textContent = "0.00";
+                balancePreview.textContent = "0.00";
+                return;
+            }
+
+            const total = Number(selectedItem.selling_price) * quantity;
+            const balance = total - downpayment;
+
+            totalPreview.textContent = total.toFixed(2);
+            balancePreview.textContent = balance.toFixed(2);
+        }
+
+        itemSelect.addEventListener("change", updatePreview);
+        itemQuantityInput.addEventListener("input", updatePreview);
+        downpaymentInput.addEventListener("input", updatePreview);
+
+        entryForm.addEventListener("submit", async function (e) {
+            e.preventDefault();
+
+            const payload = {
+                customer_id: document.getElementById("customer_id").value,
+                customer_name: document.getElementById("customer_name").value,
+                customer_address: document.getElementById("customer_address").value,
+                customer_phone: document.getElementById("customer_phone").value,
+                collector_id: document.getElementById("collector_id").value,
+                item_id: document.getElementById("item_id").value,
+                item_quantity: document.getElementById("item_quantity").value,
+                downpayment: document.getElementById("downpayment").value,
+                downpayment_date: document.getElementById("downpayment_date").value
+            };
+
+            try {
+                const response = await fetch("/new-customer-sale", {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json"
+                    },
+                    body: JSON.stringify(payload)
+                });
+
+                const result = await response.json();
+
+                if (!response.ok) {
+                    alert(result.message || "Failed to save record");
+                    return;
+                }
+
+                alert("Customer and first sale saved successfully");
+                entryForm.reset();
+                totalPreview.textContent = "0.00";
+                balancePreview.textContent = "0.00";
+                setTodayDate();
+
+                await loadItems();
+                await loadRecords();
+            } catch (error) {
+                console.log(error);
+                alert("Could not save record");
+            }
+        });
+
+        async function initPage() {
+            await loadCollectors();
+            await loadItems();
+            await loadRecords();
+            setTodayDate();
+        }
+
+        initPage();
+    </script>
+</body>
+</html>

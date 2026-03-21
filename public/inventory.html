@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Inventory</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background: #f7f7f7;
+        }
+
+        h1 {
+            margin-bottom: 10px;
+        }
+
+        .card {
+            background: white;
+            border: 1px solid #ddd;
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 20px;
+            max-width: 1200px;
+        }
+
+        .form-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 14px 18px;
+            max-width: 900px;
+        }
+
+        .field {
+            display: flex;
+            flex-direction: column;
+        }
+
+        label {
+            display: block;
+            font-weight: bold;
+            margin-bottom: 6px;
+        }
+
+        input {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #bbb;
+            border-radius: 6px;
+            font-size: 15px;
+            box-sizing: border-box;
+        }
+
+        .button-row {
+            margin-top: 16px;
+        }
+
+        button {
+            padding: 10px 18px;
+            border: none;
+            border-radius: 8px;
+            background: #2563eb;
+            color: white;
+            cursor: pointer;
+            font-size: 15px;
+            margin-right: 8px;
+        }
+
+        button:hover {
+            background: #1d4ed8;
+        }
+
+        .secondary-btn {
+            background: #64748b;
+        }
+
+        .secondary-btn:hover {
+            background: #475569;
+        }
+
+        .edit-btn {
+            background: #16a34a;
+        }
+
+        .edit-btn:hover {
+            background: #15803d;
+        }
+
+        .toggle-btn {
+            background: #f59e0b;
+            color: white;
+        }
+
+        .toggle-btn:hover {
+            background: #d97706;
+        }
+
+        .active-btn {
+            background: #16a34a;
+        }
+
+        .active-btn:hover {
+            background: #15803d;
+        }
+
+        .table-wrap {
+            max-height: 550px;
+            overflow-y: auto;
+            overflow-x: auto;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            background: white;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            min-width: 1100px;
+        }
+
+        th, td {
+            padding: 10px;
+            border-bottom: 1px solid #ddd;
+            text-align: left;
+            white-space: nowrap;
+        }
+
+        th {
+            background: #f1f5f9;
+            position: sticky;
+            top: 0;
+            z-index: 1;
+        }
+
+        .inactive-row {
+            background: #fef2f2;
+        }
+
+        .muted {
+            color: #666;
+            margin-top: 4px;
+        }
+
+        @media (max-width: 900px) {
+            .form-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <h1>Inventory Management</h1>
+
+    <p><a href="/">Back to Home</a></p>
+
+    <div class="card">
+        <h2 id="formTitle">Add Item</h2>
+        <p class="muted" id="formHint">Enter inventory details below.</p>
+
+        <form id="inventoryForm">
+            <div class="form-grid">
+                <div class="field">
+                    <label>Item Name</label>
+                    <input type="text" id="item_name" required>
+                </div>
+
+                <div class="field">
+                    <label>Capital Price</label>
+                    <input type="number" id="capital_price" step="0.01" min="0" required>
+                </div>
+
+                <div class="field">
+                    <label>Selling Price</label>
+                    <input type="number" id="selling_price" step="0.01" min="0" required>
+                </div>
+
+                <div class="field">
+                    <label>Quantity</label>
+                    <input type="number" id="quantity" min="0" required>
+                </div>
+            </div>
+
+            <div class="button-row">
+                <button type="submit" id="saveBtn">Save Item</button>
+                <button type="button" id="cancelEditBtn" class="secondary-btn" style="display:none;">Cancel Edit</button>
+            </div>
+        </form>
+    </div>
+
+    <div class="card">
+        <h2>Inventory List</h2>
+        <p class="muted">Scrollable table for many inventory records.</p>
+
+        <div class="table-wrap">
+            <table>
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Item Name</th>
+                        <th>Capital Price</th>
+                        <th>Selling Price</th>
+                        <th>Quantity</th>
+                        <th>Status</th>
+                        <th>Action</th>
+                    </tr>
+                </thead>
+                <tbody id="inventoryTableBody"></tbody>
+            </table>
+        </div>
+    </div>
+
+    <script>
+        const form = document.getElementById("inventoryForm");
+        const tableBody = document.getElementById("inventoryTableBody");
+        const formTitle = document.getElementById("formTitle");
+        const formHint = document.getElementById("formHint");
+        const saveBtn = document.getElementById("saveBtn");
+        const cancelEditBtn = document.getElementById("cancelEditBtn");
+
+        let editingItemId = null;
+
+        function resetForm() {
+            form.reset();
+            editingItemId = null;
+            formTitle.textContent = "Add Item";
+            formHint.textContent = "Enter inventory details below.";
+            saveBtn.textContent = "Save Item";
+            cancelEditBtn.style.display = "none";
+        }
+
+        async function loadInventory() {
+            try {
+                const res = await fetch("/inventory");
+                const data = await res.json();
+
+                if (!res.ok) {
+                    alert(data.message || "Failed to load inventory");
+                    return;
+                }
+
+                tableBody.innerHTML = "";
+
+                data.forEach(item => {
+                    const rowClass = Number(item.is_active) === 1 ? "" : "inactive-row";
+                    const statusText = Number(item.is_active) === 1 ? "Active" : "Inactive";
+                    const toggleText = Number(item.is_active) === 1 ? "Deactivate" : "Activate";
+                    const toggleClass = Number(item.is_active) === 1 ? "toggle-btn" : "active-btn";
+
+                    tableBody.innerHTML += `
+                        <tr class="${rowClass}">
+                            <td>${item.id}</td>
+                            <td>${item.item_name}</td>
+                            <td>${item.capital_price}</td>
+                            <td>${item.selling_price}</td>
+                            <td>${item.quantity}</td>
+                            <td>${statusText}</td>
+                            <td>
+                                <button
+                                    class="edit-btn"
+                                    type="button"
+                                    onclick='editItem(${JSON.stringify(item.id)}, ${JSON.stringify(item.item_name)}, ${JSON.stringify(item.capital_price)}, ${JSON.stringify(item.selling_price)}, ${JSON.stringify(item.quantity)})'>
+                                    Edit
+                                </button>
+                                <button
+                                    class="${toggleClass}"
+                                    type="button"
+                                    onclick="toggleItem(${item.id})">
+                                    ${toggleText}
+                                </button>
+                            </td>
+                        </tr>
+                    `;
+                });
+            } catch (error) {
+                console.log(error);
+                alert("Could not load inventory");
+            }
+        }
+
+        function editItem(id, item_name, capital_price, selling_price, quantity) {
+            editingItemId = id;
+
+            document.getElementById("item_name").value = item_name;
+            document.getElementById("capital_price").value = capital_price;
+            document.getElementById("selling_price").value = selling_price;
+            document.getElementById("quantity").value = quantity;
+
+            formTitle.textContent = "Edit Item";
+            formHint.textContent = `You are editing item ID ${id}.`;
+            saveBtn.textContent = "Update Item";
+            cancelEditBtn.style.display = "inline-block";
+
+            window.scrollTo({ top: 0, behavior: "smooth" });
+        }
+
+        async function toggleItem(id) {
+            const confirmed = confirm("Are you sure you want to change this item's status?");
+
+            if (!confirmed) return;
+
+            try {
+                const res = await fetch(`/inventory/${id}/toggle`, {
+                    method: "PUT"
+                });
+
+                const data = await res.json();
+
+                if (!res.ok) {
+                    alert(data.message || "Failed to update item status");
+                    return;
+                }
+
+                alert("Item status updated successfully");
+
+                if (editingItemId === id) {
+                    resetForm();
+                }
+
+                loadInventory();
+            } catch (error) {
+                console.log(error);
+                alert("Could not update item status");
+            }
+        }
+
+        form.addEventListener("submit", async function(e) {
+            e.preventDefault();
+
+            const item_name = document.getElementById("item_name").value;
+            const capital_price = document.getElementById("capital_price").value;
+            const selling_price = document.getElementById("selling_price").value;
+            const quantity = document.getElementById("quantity").value;
+
+            try {
+                let response;
+
+                if (editingItemId === null) {
+                    response = await fetch("/inventory", {
+                        method: "POST",
+                        headers: {
+                            "Content-Type": "application/json"
+                        },
+                        body: JSON.stringify({
+                            item_name,
+                            capital_price,
+                            selling_price,
+                            quantity
+                        })
+                    });
+                } else {
+                    response = await fetch(`/inventory/${editingItemId}`, {
+                        method: "PUT",
+                        headers: {
+                            "Content-Type": "application/json"
+                        },
+                        body: JSON.stringify({
+                            item_name,
+                            capital_price,
+                            selling_price,
+                            quantity
+                        })
+                    });
+                }
+
+                const result = await response.json();
+
+                if (!response.ok) {
+                    alert(result.message || "Failed to save item");
+                    return;
+                }
+
+                alert(editingItemId === null ? "Item added successfully" : "Item updated successfully");
+                resetForm();
+                loadInventory();
+            } catch (error) {
+                console.log(error);
+                alert("Could not save item");
+            }
+        });
+
+        cancelEditBtn.addEventListener("click", resetForm);
+
+        loadInventory();
+    </script>
+</body>
+</html>
