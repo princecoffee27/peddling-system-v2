@@ -3,7 +3,7 @@ const mysql = require("mysql2");
 const db = mysql.createConnection({
     host: process.env.MYSQLHOST || "localhost",
     user: process.env.MYSQLUSER || "root",
-    password: process.env.MYSQLPASSWORD || "071570",
+    password: process.env.MYSQLPASSWORD || "",
     database: process.env.MYSQLDATABASE || "peddling_db",
     port: process.env.MYSQLPORT ? Number(process.env.MYSQLPORT) : 3306
 });
