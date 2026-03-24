@@ -42,7 +42,7 @@
             margin-bottom: 6px;
         }
 
-        input {
+        input, select {
             width: 100%;
             padding: 10px;
             border: 1px solid #bbb;
@@ -68,6 +68,11 @@
 
         button:hover {
             background: #1d4ed8;
+        }
+
+        button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
         }
 
         .secondary-btn {
@@ -141,6 +146,23 @@
             margin-top: 4px;
         }
 
+        .table-toolbar {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            margin-bottom: 12px;
+        }
+
+        .pagination-box {
+            margin-top: 15px;
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
         @media (max-width: 900px) {
             .form-grid {
                 grid-template-columns: 1fr;
@@ -189,7 +211,19 @@
 
     <div class="card">
         <h2>Inventory List</h2>
-        <p class="muted">Scrollable table for many inventory records.</p>
+        <p class="muted">Default load is 50 items. Use page size and pagination below.</p>
+
+        <div class="table-toolbar">
+            <div>
+                <label for="pageSizeSelect" style="margin-bottom:0;">Rows per page</label>
+                <select id="pageSizeSelect" style="margin-left:10px; width:auto;">
+                    <option value="50">50</option>
+                    <option value="100">100</option>
+                </select>
+            </div>
+
+            <div id="tableSummary" class="muted">Inventory list</div>
+        </div>
 
         <div class="table-wrap">
             <table>
@@ -207,6 +241,12 @@
                 <tbody id="inventoryTableBody"></tbody>
             </table>
         </div>
+
+        <div class="pagination-box">
+            <button type="button" id="prevPageBtn" class="secondary-btn">Previous</button>
+            <span id="pageInfo">Page 1 of 1 | Total: 0</span>
+            <button type="button" id="nextPageBtn" class="secondary-btn">Next</button>
+        </div>
     </div>
 
     <script>
@@ -216,8 +256,16 @@
         const formHint = document.getElementById("formHint");
         const saveBtn = document.getElementById("saveBtn");
         const cancelEditBtn = document.getElementById("cancelEditBtn");
+        const pageSizeSelect = document.getElementById("pageSizeSelect");
+        const prevPageBtn = document.getElementById("prevPageBtn");
+        const nextPageBtn = document.getElementById("nextPageBtn");
+        const pageInfo = document.getElementById("pageInfo");
+        const tableSummary = document.getElementById("tableSummary");
 
         let editingItemId = null;
+        let currentPage = 1;
+        let totalPages = 1;
+        let currentLimit = 50;
 
         function resetForm() {
             form.reset();
@@ -228,9 +276,12 @@
             cancelEditBtn.style.display = "none";
         }
 
-        async function loadInventory() {
+        async function loadInventory(page = currentPage, limit = currentLimit) {
+            currentPage = page;
+            currentLimit = Number(limit);
+
             try {
-                const res = await fetch("/inventory");
+                const res = await fetch(`/inventory?page=${currentPage}&limit=${currentLimit}`);
                 const data = await res.json();
 
                 if (!res.ok) {
@@ -238,43 +289,74 @@
                     return;
                 }
 
-                tableBody.innerHTML = "";
-
-                data.forEach(item => {
-                    const rowClass = Number(item.is_active) === 1 ? "" : "inactive-row";
-                    const statusText = Number(item.is_active) === 1 ? "Active" : "Inactive";
-                    const toggleText = Number(item.is_active) === 1 ? "Deactivate" : "Activate";
-                    const toggleClass = Number(item.is_active) === 1 ? "toggle-btn" : "active-btn";
-
-                    tableBody.innerHTML += `
-                        <tr class="${rowClass}">
-                            <td>${item.id}</td>
-                            <td>${item.item_name}</td>
-                            <td>${item.capital_price}</td>
-                            <td>${item.selling_price}</td>
-                            <td>${item.quantity}</td>
-                            <td>${statusText}</td>
-                            <td>
-                                <button
-                                    class="edit-btn"
-                                    type="button"
-                                    onclick='editItem(${JSON.stringify(item.id)}, ${JSON.stringify(item.item_name)}, ${JSON.stringify(item.capital_price)}, ${JSON.stringify(item.selling_price)}, ${JSON.stringify(item.quantity)})'>
-                                    Edit
-                                </button>
-                                <button
-                                    class="${toggleClass}"
-                                    type="button"
-                                    onclick="toggleItem(${item.id})">
-                                    ${toggleText}
-                                </button>
-                            </td>
-                        </tr>
-                    `;
+                renderInventory(data.rows || []);
+                updatePagination(data.pagination || {
+                    page: 1,
+                    totalPages: 1,
+                    total: 0,
+                    limit: currentLimit
                 });
             } catch (error) {
                 console.log(error);
                 alert("Could not load inventory");
             }
+        }
+
+        function renderInventory(data) {
+            tableBody.innerHTML = "";
+
+            if (data.length === 0) {
+                tableBody.innerHTML = `
+                    <tr>
+                        <td colspan="7">No inventory records found.</td>
+                    </tr>
+                `;
+                return;
+            }
+
+            data.forEach(item => {
+                const rowClass = Number(item.is_active) === 1 ? "" : "inactive-row";
+                const statusText = Number(item.is_active) === 1 ? "Active" : "Inactive";
+                const toggleText = Number(item.is_active) === 1 ? "Deactivate" : "Activate";
+                const toggleClass = Number(item.is_active) === 1 ? "toggle-btn" : "active-btn";
+
+                tableBody.innerHTML += `
+                    <tr class="${rowClass}">
+                        <td>${item.id}</td>
+                        <td>${item.item_name}</td>
+                        <td>${item.capital_price}</td>
+                        <td>${item.selling_price}</td>
+                        <td>${item.quantity}</td>
+                        <td>${statusText}</td>
+                        <td>
+                            <button
+                                class="edit-btn"
+                                type="button"
+                                onclick='editItem(${JSON.stringify(item.id)}, ${JSON.stringify(item.item_name)}, ${JSON.stringify(item.capital_price)}, ${JSON.stringify(item.selling_price)}, ${JSON.stringify(item.quantity)})'>
+                                Edit
+                            </button>
+                            <button
+                                class="${toggleClass}"
+                                type="button"
+                                onclick="toggleItem(${item.id})">
+                                ${toggleText}
+                            </button>
+                        </td>
+                    </tr>
+                `;
+            });
+        }
+
+        function updatePagination(pagination) {
+            currentPage = pagination.page || 1;
+            totalPages = pagination.totalPages || 1;
+            currentLimit = pagination.limit || currentLimit;
+
+            pageInfo.textContent = `Page ${currentPage} of ${totalPages} | Total: ${pagination.total || 0}`;
+            tableSummary.textContent = `${currentLimit} rows per page`;
+
+            prevPageBtn.disabled = currentPage <= 1;
+            nextPageBtn.disabled = currentPage >= totalPages || totalPages === 0;
         }
 
         function editItem(id, item_name, capital_price, selling_price, quantity) {
@@ -316,7 +398,7 @@
                     resetForm();
                 }
 
-                loadInventory();
+                loadInventory(currentPage, currentLimit);
             } catch (error) {
                 console.log(error);
                 alert("Could not update item status");
@@ -330,6 +412,20 @@
             const capital_price = document.getElementById("capital_price").value;
             const selling_price = document.getElementById("selling_price").value;
             const quantity = document.getElementById("quantity").value;
+
+            const confirmMessage =
+                `Please confirm this item entry:\n\n` +
+                `Item Name: ${item_name}\n` +
+                `Capital Price: ${capital_price}\n` +
+                `Selling Price: ${selling_price}\n` +
+                `Quantity: ${quantity}\n\n` +
+                `${editingItemId === null ? "Continue saving new item?" : "Continue updating item?"}`;
+
+            const confirmed = confirm(confirmMessage);
+
+            if (!confirmed) {
+                return;
+            }
 
             try {
                 let response;
@@ -371,7 +467,12 @@
 
                 alert(editingItemId === null ? "Item added successfully" : "Item updated successfully");
                 resetForm();
-                loadInventory();
+
+                if (editingItemId === null) {
+                    await loadInventory(1, currentLimit);
+                } else {
+                    await loadInventory(currentPage, currentLimit);
+                }
             } catch (error) {
                 console.log(error);
                 alert("Could not save item");
@@ -380,7 +481,31 @@
 
         cancelEditBtn.addEventListener("click", resetForm);
 
-        loadInventory();
+        pageSizeSelect.addEventListener("change", async () => {
+            currentLimit = Number(pageSizeSelect.value);
+            currentPage = 1;
+            await loadInventory(1, currentLimit);
+        });
+
+        prevPageBtn.addEventListener("click", async () => {
+            if (currentPage > 1) {
+                await loadInventory(currentPage - 1, currentLimit);
+            }
+        });
+
+        nextPageBtn.addEventListener("click", async () => {
+            if (currentPage < totalPages) {
+                await loadInventory(currentPage + 1, currentLimit);
+            }
+        });
+
+        async function initPage() {
+            pageSizeSelect.value = "50";
+            currentLimit = 50;
+            await loadInventory(1, 50);
+        }
+
+        initPage();
     </script>
 </body>
 </html>

@@ -44,9 +44,19 @@ router.get("/items", (req, res) => {
     });
 });
 
-// Load saved customer + sale records for table view
+// Load saved customer + sale records for table view with pagination
 router.get("/records", (req, res) => {
-    const sql = `
+    const page = parseInt(req.query.page, 10) || 1;
+    const limit = parseInt(req.query.limit, 10) || 25;
+    const safeLimit = [25, 50, 100].includes(limit) ? limit : 25;
+    const offset = (page - 1) * safeLimit;
+
+    const countSql = `
+        SELECT COUNT(*) AS total
+        FROM sales
+    `;
+
+    const dataSql = `
         SELECT
             sales.id AS sale_id,
             customers.id AS customer_id,
@@ -71,17 +81,38 @@ router.get("/records", (req, res) => {
         INNER JOIN inventory ON sales.item_id = inventory.id
         LEFT JOIN collectors ON customers.collector_id = collectors.id
         ORDER BY sales.id DESC
+        LIMIT ? OFFSET ?
     `;
 
-    db.query(sql, (err, result) => {
-        if (err) {
-            console.log("LOAD RECORDS ERROR:", err);
+    db.query(countSql, (countErr, countResult) => {
+        if (countErr) {
+            console.log("COUNT RECORDS ERROR:", countErr);
             return res.status(500).json({
-                message: err.sqlMessage || err.message
+                message: countErr.sqlMessage || countErr.message
             });
         }
 
-        res.json(result);
+        const total = countResult[0]?.total || 0;
+        const totalPages = total > 0 ? Math.ceil(total / safeLimit) : 0;
+
+        db.query(dataSql, [safeLimit, offset], (err, result) => {
+            if (err) {
+                console.log("LOAD RECORDS ERROR:", err);
+                return res.status(500).json({
+                    message: err.sqlMessage || err.message
+                });
+            }
+
+            res.json({
+                rows: result,
+                pagination: {
+                    page,
+                    limit: safeLimit,
+                    total,
+                    totalPages
+                }
+            });
+        });
     });
 });
 
@@ -141,7 +172,7 @@ router.post("/", (req, res) => {
     } = req.body;
 
     const qty = Number(item_quantity);
-    const dp = Number(downpayment);
+    const dp = Number(downpayment || 0);
 
     if (
         !customer_id ||
@@ -318,7 +349,8 @@ router.post("/", (req, res) => {
                                                 res.json({
                                                     message: "Customer with first sale saved successfully",
                                                     total,
-                                                    balance
+                                                    balance,
+                                                    sale_id: saleId
                                                 });
                                             });
                                         }
@@ -337,7 +369,8 @@ router.post("/", (req, res) => {
                                         res.json({
                                             message: "Customer with first sale saved successfully",
                                             total,
-                                            balance
+                                            balance,
+                                            sale_id: saleId
                                         });
                                     });
                                 }

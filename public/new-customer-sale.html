@@ -75,6 +75,11 @@
             background: #1d4ed8;
         }
 
+        button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
         .edit-btn {
             background: #f59e0b;
         }
@@ -89,6 +94,14 @@
 
         .save-btn:hover {
             background: #15803d;
+        }
+
+        .secondary-btn {
+            background: #64748b;
+        }
+
+        .secondary-btn:hover {
+            background: #475569;
         }
 
         .row-top {
@@ -139,6 +152,23 @@
             grid-template-columns: 1fr 1fr 1fr 1fr auto;
             gap: 10px;
             align-items: end;
+        }
+
+        .table-toolbar {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            margin-bottom: 12px;
+        }
+
+        .pagination-box {
+            margin-top: 15px;
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            flex-wrap: wrap;
         }
 
         @media (max-width: 1100px) {
@@ -227,6 +257,19 @@
             <h2>Saved Customer Sales</h2>
             <p class="small-text">Newest saved records will appear here automatically.</p>
 
+            <div class="table-toolbar">
+                <div>
+                    <label for="pageSizeSelect" style="margin-bottom:0;">Rows per page</label>
+                    <select id="pageSizeSelect" style="margin-left:10px; width:auto;">
+                        <option value="25">25</option>
+                        <option value="50">50</option>
+                        <option value="100">100</option>
+                    </select>
+                </div>
+
+                <div id="tableSummary" class="small-text">Showing latest records</div>
+            </div>
+
             <div class="table-wrap">
                 <table>
                     <thead>
@@ -247,6 +290,12 @@
                     <tbody id="recordsTableBody"></tbody>
                 </table>
             </div>
+
+            <div class="pagination-box">
+                <button type="button" id="prevPageBtn" class="secondary-btn">Previous</button>
+                <span id="pageInfo">Page 1 of 1 | Total: 0</span>
+                <button type="button" id="nextPageBtn" class="secondary-btn">Next</button>
+            </div>
         </div>
     </div>
 
@@ -260,9 +309,17 @@
         const balancePreview = document.getElementById("balancePreview");
         const entryForm = document.getElementById("entryForm");
         const recordsTableBody = document.getElementById("recordsTableBody");
+        const pageSizeSelect = document.getElementById("pageSizeSelect");
+        const prevPageBtn = document.getElementById("prevPageBtn");
+        const nextPageBtn = document.getElementById("nextPageBtn");
+        const pageInfo = document.getElementById("pageInfo");
+        const tableSummary = document.getElementById("tableSummary");
 
         let inventoryItems = [];
         let collectorsCache = [];
+        let currentPage = 1;
+        let totalPages = 1;
+        let currentLimit = 25;
 
         function setTodayDate() {
             const today = new Date().toISOString().split("T")[0];
@@ -332,9 +389,12 @@
             }
         }
 
-        async function loadRecords() {
+        async function loadRecords(page = currentPage, limit = currentLimit) {
+            currentPage = page;
+            currentLimit = Number(limit);
+
             try {
-                const res = await fetch("/new-customer-sale/records");
+                const res = await fetch(`/new-customer-sale/records?page=${currentPage}&limit=${currentLimit}`);
                 const data = await res.json();
 
                 if (!res.ok) {
@@ -342,63 +402,94 @@
                     return;
                 }
 
-                recordsTableBody.innerHTML = "";
-
-                data.forEach(record => {
-                    recordsTableBody.innerHTML += `
-                        <tr>
-                            <td>${record.customer_id}</td>
-                            <td>${record.customer_name}</td>
-                            <td>${record.customer_address}</td>
-                            <td>${record.customer_phone}</td>
-                            <td>${record.item_bought}</td>
-                            <td>${record.quantity}</td>
-                            <td>${record.downpayment}</td>
-                            <td>${record.downpayment_date || ""}</td>
-                            <td>${record.collector_name || ""}</td>
-                            <td>${record.balance}</td>
-                            <td>
-                                <button class="edit-btn" type="button" onclick="toggleCustomerEdit(${record.customer_id})">Edit</button>
-                            </td>
-                        </tr>
-
-                        <tr id="edit-row-${record.customer_id}" class="edit-row" style="display:none;">
-                            <td colspan="11">
-                                <div class="edit-grid">
-                                    <div>
-                                        <label>Customer Name</label>
-                                        <input type="text" id="edit-name-${record.customer_id}" value="${record.customer_name || ""}">
-                                    </div>
-
-                                    <div>
-                                        <label>Customer Address</label>
-                                        <input type="text" id="edit-address-${record.customer_id}" value="${record.customer_address || ""}">
-                                    </div>
-
-                                    <div>
-                                        <label>Customer Phone</label>
-                                        <input type="text" id="edit-phone-${record.customer_id}" value="${record.customer_phone || ""}">
-                                    </div>
-
-                                    <div>
-                                        <label>Collector</label>
-                                        <select id="edit-collector-${record.customer_id}">
-                                            ${collectorOptionsHtml(record.collector_id)}
-                                        </select>
-                                    </div>
-
-                                    <div>
-                                        <button class="save-btn" type="button" onclick="saveCustomerEdit(${record.customer_id})">Save Edit</button>
-                                    </div>
-                                </div>
-                            </td>
-                        </tr>
-                    `;
+                renderRecords(data.rows || []);
+                updatePagination(data.pagination || {
+                    page: 1,
+                    totalPages: 1,
+                    total: 0,
+                    limit: currentLimit
                 });
             } catch (error) {
                 console.log(error);
                 alert("Could not load saved records");
             }
+        }
+
+        function renderRecords(data) {
+            recordsTableBody.innerHTML = "";
+
+            if (data.length === 0) {
+                recordsTableBody.innerHTML = `
+                    <tr>
+                        <td colspan="11">No saved customer sales found.</td>
+                    </tr>
+                `;
+                return;
+            }
+
+            data.forEach(record => {
+                recordsTableBody.innerHTML += `
+                    <tr>
+                        <td>${record.customer_id}</td>
+                        <td>${record.customer_name}</td>
+                        <td>${record.customer_address || ""}</td>
+                        <td>${record.customer_phone || ""}</td>
+                        <td>${record.item_bought || ""}</td>
+                        <td>${record.quantity}</td>
+                        <td>${record.downpayment}</td>
+                        <td>${record.downpayment_date || ""}</td>
+                        <td>${record.collector_name || ""}</td>
+                        <td>${record.balance}</td>
+                        <td>
+                            <button class="edit-btn" type="button" onclick="toggleCustomerEdit(${record.customer_id})">Edit</button>
+                        </td>
+                    </tr>
+
+                    <tr id="edit-row-${record.customer_id}" class="edit-row" style="display:none;">
+                        <td colspan="11">
+                            <div class="edit-grid">
+                                <div>
+                                    <label>Customer Name</label>
+                                    <input type="text" id="edit-name-${record.customer_id}" value="${record.customer_name || ""}">
+                                </div>
+
+                                <div>
+                                    <label>Customer Address</label>
+                                    <input type="text" id="edit-address-${record.customer_id}" value="${record.customer_address || ""}">
+                                </div>
+
+                                <div>
+                                    <label>Customer Phone</label>
+                                    <input type="text" id="edit-phone-${record.customer_id}" value="${record.customer_phone || ""}">
+                                </div>
+
+                                <div>
+                                    <label>Collector</label>
+                                    <select id="edit-collector-${record.customer_id}">
+                                        ${collectorOptionsHtml(record.collector_id)}
+                                    </select>
+                                </div>
+
+                                <div>
+                                    <button class="save-btn" type="button" onclick="saveCustomerEdit(${record.customer_id})">Save Edit</button>
+                                </div>
+                            </div>
+                        </td>
+                    </tr>
+                `;
+            });
+        }
+
+        function updatePagination(pagination) {
+            currentPage = pagination.page || 1;
+            totalPages = pagination.totalPages || 1;
+            currentLimit = pagination.limit || currentLimit;
+
+            pageInfo.textContent = `Page ${currentPage} of ${totalPages} | Total: ${pagination.total || 0}`;
+            tableSummary.textContent = `Latest records, ${currentLimit} rows per page`;
+
+            prevPageBtn.disabled = currentPage <= 1;
+            nextPageBtn.disabled = currentPage >= totalPages || totalPages === 0;
         }
 
         function toggleCustomerEdit(customerId) {
@@ -439,7 +530,7 @@
                 }
 
                 alert("Customer updated successfully");
-                await loadRecords();
+                await loadRecords(currentPage, currentLimit);
             } catch (error) {
                 console.log(error);
                 alert("Could not update customer");
@@ -470,55 +561,115 @@
         itemQuantityInput.addEventListener("input", updatePreview);
         downpaymentInput.addEventListener("input", updatePreview);
 
-        entryForm.addEventListener("submit", async function (e) {
-            e.preventDefault();
+        pageSizeSelect.addEventListener("change", async () => {
+            currentLimit = Number(pageSizeSelect.value);
+            currentPage = 1;
+            await loadRecords(1, currentLimit);
+        });
 
-            const payload = {
-                customer_id: document.getElementById("customer_id").value,
-                customer_name: document.getElementById("customer_name").value,
-                customer_address: document.getElementById("customer_address").value,
-                customer_phone: document.getElementById("customer_phone").value,
-                collector_id: document.getElementById("collector_id").value,
-                item_id: document.getElementById("item_id").value,
-                item_quantity: document.getElementById("item_quantity").value,
-                downpayment: document.getElementById("downpayment").value,
-                downpayment_date: document.getElementById("downpayment_date").value
-            };
-
-            try {
-                const response = await fetch("/new-customer-sale", {
-                    method: "POST",
-                    headers: {
-                        "Content-Type": "application/json"
-                    },
-                    body: JSON.stringify(payload)
-                });
-
-                const result = await response.json();
-
-                if (!response.ok) {
-                    alert(result.message || "Failed to save record");
-                    return;
-                }
-
-                alert("Customer and first sale saved successfully");
-                entryForm.reset();
-                totalPreview.textContent = "0.00";
-                balancePreview.textContent = "0.00";
-                setTodayDate();
-
-                await loadItems();
-                await loadRecords();
-            } catch (error) {
-                console.log(error);
-                alert("Could not save record");
+        prevPageBtn.addEventListener("click", async () => {
+            if (currentPage > 1) {
+                await loadRecords(currentPage - 1, currentLimit);
             }
         });
 
+        nextPageBtn.addEventListener("click", async () => {
+            if (currentPage < totalPages) {
+                await loadRecords(currentPage + 1, currentLimit);
+            }
+        });
+
+        entryForm.addEventListener("submit", async function (e) {
+    e.preventDefault();
+
+    const customer_id = document.getElementById("customer_id").value;
+    const customer_name = document.getElementById("customer_name").value;
+    const customer_address = document.getElementById("customer_address").value;
+    const customer_phone = document.getElementById("customer_phone").value;
+    const collector_id = document.getElementById("collector_id").value;
+    const item_id = document.getElementById("item_id").value;
+    const item_quantity = document.getElementById("item_quantity").value;
+    const downpayment = document.getElementById("downpayment").value;
+    const downpayment_date = document.getElementById("downpayment_date").value;
+
+    const selectedCollector = collectorsCache.find(c => String(c.id) === String(collector_id));
+    const selectedItem = inventoryItems.find(i => String(i.id) === String(item_id));
+
+    const totalAmount = totalPreview.textContent;
+    const remainingBalance = balancePreview.textContent;
+
+    const confirmMessage =
+        `Please confirm this entry:\n\n` +
+        `Customer ID: ${customer_id}\n` +
+        `Customer Name: ${customer_name}\n` +
+        `Address: ${customer_address}\n` +
+        `Phone: ${customer_phone}\n` +
+        `Collector: ${selectedCollector ? selectedCollector.name : collector_id}\n` +
+        `Item: ${selectedItem ? selectedItem.item_name : item_id}\n` +
+        `Quantity: ${item_quantity}\n` +
+        `Down Payment: ${downpayment}\n` +
+        `Down Payment Date: ${downpayment_date}\n` +
+        `Total Amount: ${totalAmount}\n` +
+        `Remaining Balance: ${remainingBalance}\n\n` +
+        `Continue saving?`;
+
+    const isConfirmed = confirm(confirmMessage);
+
+    if (!isConfirmed) {
+        return;
+    }
+
+    const payload = {
+        customer_id,
+        customer_name,
+        customer_address,
+        customer_phone,
+        collector_id,
+        item_id,
+        item_quantity,
+        downpayment,
+        downpayment_date
+    };
+
+    try {
+        const response = await fetch("/new-customer-sale", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify(payload)
+        });
+
+        const result = await response.json();
+
+        if (!response.ok) {
+            alert(result.message || "Failed to save record");
+            return;
+        }
+
+        alert("Customer and first sale saved successfully");
+        entryForm.reset();
+        totalPreview.textContent = "0.00";
+        balancePreview.textContent = "0.00";
+        setTodayDate();
+
+        await loadItems();
+
+        currentPage = 1;
+        await loadRecords(1, currentLimit);
+    } catch (error) {
+        console.log(error);
+        alert("Could not save record");
+    }
+});
+
         async function initPage() {
+            pageSizeSelect.value = "25";
+            currentLimit = 25;
+
             await loadCollectors();
             await loadItems();
-            await loadRecords();
+            await loadRecords(1, 25);
             setTodayDate();
         }
 

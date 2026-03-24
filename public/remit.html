@@ -70,6 +70,11 @@
             background: #1d4ed8;
         }
 
+        button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
         .secondary-btn {
             background: #64748b;
         }
@@ -142,6 +147,28 @@
             grid-column: 1 / -1;
         }
 
+        .toolbar-line {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 12px;
+            flex-wrap: wrap;
+            margin-bottom: 12px;
+        }
+
+        .pagination-box {
+            margin-top: 12px;
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .muted {
+            color: #666;
+            font-size: 13px;
+        }
+
         @media (max-width: 1100px) {
             .main-grid {
                 grid-template-columns: 1fr;
@@ -194,7 +221,7 @@
         </div>
 
         <div style="margin-top: 15px;">
-            <button id="searchBtn">Search</button>
+            <button id="searchBtn" type="button">Search</button>
             <button id="clearBtn" class="secondary-btn" type="button">Clear</button>
         </div>
     </div>
@@ -203,6 +230,18 @@
         <div class="card">
             <h2>Search Results</h2>
             <p>Select payments to add to remit.</p>
+
+            <div class="toolbar-line">
+                <div>
+                    <label for="searchPageSizeSelect" style="margin-bottom:0;">Rows per page</label>
+                    <select id="searchPageSizeSelect" style="margin-left:10px; width:auto;">
+                        <option value="25">25</option>
+                        <option value="50">50</option>
+                    </select>
+                </div>
+
+                <div id="searchTableSummary" class="muted">No search yet</div>
+            </div>
 
             <div class="table-wrap">
                 <table>
@@ -219,6 +258,12 @@
                     </thead>
                     <tbody id="searchResultsBody"></tbody>
                 </table>
+            </div>
+
+            <div class="pagination-box">
+                <button type="button" id="searchPrevBtn" class="secondary-btn">Previous</button>
+                <span id="searchPageInfo">Page 0 of 0 | Total: 0</span>
+                <button type="button" id="searchNextBtn" class="secondary-btn">Next</button>
             </div>
         </div>
 
@@ -300,13 +345,26 @@
             </div>
 
             <div style="margin-top: 15px;">
-                <button id="saveRemitBtn">Save Remit</button>
+                <button id="saveRemitBtn" type="button">Save Remit</button>
             </div>
         </div>
     </div>
 
     <div class="card">
         <h2>Saved Remits</h2>
+
+        <div class="toolbar-line">
+            <div>
+                <label for="historyPageSizeSelect" style="margin-bottom:0;">Rows per page</label>
+                <select id="historyPageSizeSelect" style="margin-left:10px; width:auto;">
+                    <option value="25">25</option>
+                    <option value="50">50</option>
+                    <option value="100">100</option>
+                </select>
+            </div>
+
+            <div id="historyTableSummary" class="muted">Saved remit history</div>
+        </div>
 
         <div class="table-wrap">
             <table>
@@ -329,6 +387,12 @@
                 </thead>
                 <tbody id="remitsHistoryBody"></tbody>
             </table>
+        </div>
+
+        <div class="pagination-box">
+            <button type="button" id="historyPrevBtn" class="secondary-btn">Previous</button>
+            <span id="historyPageInfo">Page 1 of 1 | Total: 0</span>
+            <button type="button" id="historyNextBtn" class="secondary-btn">Next</button>
         </div>
     </div>
 
@@ -354,9 +418,30 @@
         const cashOnHandInput = document.getElementById("cash_on_hand");
         const remitDateInput = document.getElementById("remit_date");
 
+        const searchPageSizeSelect = document.getElementById("searchPageSizeSelect");
+        const searchPrevBtn = document.getElementById("searchPrevBtn");
+        const searchNextBtn = document.getElementById("searchNextBtn");
+        const searchPageInfo = document.getElementById("searchPageInfo");
+        const searchTableSummary = document.getElementById("searchTableSummary");
+
+        const historyPageSizeSelect = document.getElementById("historyPageSizeSelect");
+        const historyPrevBtn = document.getElementById("historyPrevBtn");
+        const historyNextBtn = document.getElementById("historyNextBtn");
+        const historyPageInfo = document.getElementById("historyPageInfo");
+        const historyTableSummary = document.getElementById("historyTableSummary");
+
         let collectors = [];
         let searchResults = [];
         let selectedItems = [];
+
+        let searchCurrentPage = 1;
+        let searchTotalPages = 0;
+        let searchCurrentLimit = 25;
+        let hasSearched = false;
+
+        let historyCurrentPage = 1;
+        let historyTotalPages = 1;
+        let historyCurrentLimit = 25;
 
         function setTodayDate() {
             const today = new Date().toISOString().split("T")[0];
@@ -384,20 +469,32 @@
             });
         }
 
-        async function searchPayments() {
+        function getSearchFilters() {
+            return {
+                customerIdFrom: document.getElementById("customer_id_from").value,
+                customerIdTo: document.getElementById("customer_id_to").value,
+                paymentDateFrom: document.getElementById("payment_date_from").value,
+                paymentDateTo: document.getElementById("payment_date_to").value,
+                collectorId: collectorSearchSelect.value
+            };
+        }
+
+        async function searchPayments(page = 1, limit = searchCurrentLimit) {
             const params = new URLSearchParams();
+            const filters = getSearchFilters();
 
-            const customerIdFrom = document.getElementById("customer_id_from").value;
-            const customerIdTo = document.getElementById("customer_id_to").value;
-            const paymentDateFrom = document.getElementById("payment_date_from").value;
-            const paymentDateTo = document.getElementById("payment_date_to").value;
-            const collectorId = collectorSearchSelect.value;
+            searchCurrentPage = page;
+            searchCurrentLimit = Number(limit);
+            hasSearched = true;
 
-            if (customerIdFrom) params.append("customer_id_from", customerIdFrom);
-            if (customerIdTo) params.append("customer_id_to", customerIdTo);
-            if (paymentDateFrom) params.append("payment_date_from", paymentDateFrom);
-            if (paymentDateTo) params.append("payment_date_to", paymentDateTo);
-            if (collectorId) params.append("collector_id", collectorId);
+            if (filters.customerIdFrom) params.append("customer_id_from", filters.customerIdFrom);
+            if (filters.customerIdTo) params.append("customer_id_to", filters.customerIdTo);
+            if (filters.paymentDateFrom) params.append("payment_date_from", filters.paymentDateFrom);
+            if (filters.paymentDateTo) params.append("payment_date_to", filters.paymentDateTo);
+            if (filters.collectorId) params.append("collector_id", filters.collectorId);
+
+            params.append("page", searchCurrentPage);
+            params.append("limit", searchCurrentLimit);
 
             const res = await fetch(`/remits/search?${params.toString()}`);
             const data = await res.json();
@@ -407,13 +504,26 @@
                 return;
             }
 
-            searchResults = data;
+            searchResults = data.rows || [];
             renderSearchResults();
+            updateSearchPagination(data.pagination || {
+                page: 0,
+                totalPages: 0,
+                total: 0,
+                limit: searchCurrentLimit
+            });
             syncCollectorAutoFields();
         }
 
         function renderSearchResults() {
             searchResultsBody.innerHTML = "";
+
+            if (!hasSearched) {
+                searchResultsBody.innerHTML = `
+                    <tr><td colspan="7">Press Search to load payment results.</td></tr>
+                `;
+                return;
+            }
 
             if (searchResults.length === 0) {
                 searchResultsBody.innerHTML = `
@@ -423,6 +533,8 @@
             }
 
             searchResults.forEach(item => {
+                const alreadySelected = selectedItems.some(x => Number(x.payment_id) === Number(item.payment_id));
+
                 searchResultsBody.innerHTML += `
                     <tr>
                         <td>${item.payment_id}</td>
@@ -432,11 +544,27 @@
                         <td>${item.amount}</td>
                         <td>${item.payment_date}</td>
                         <td>
-                            <button class="add-btn" onclick="addToSelected(${item.payment_id})">Add</button>
+                            <button class="add-btn" type="button" onclick="addToSelected(${item.payment_id})" ${alreadySelected ? "disabled" : ""}>
+                                ${alreadySelected ? "Added" : "Add"}
+                            </button>
                         </td>
                     </tr>
                 `;
             });
+        }
+
+        function updateSearchPagination(pagination) {
+            searchCurrentPage = pagination.page || 0;
+            searchTotalPages = pagination.totalPages || 0;
+            searchCurrentLimit = pagination.limit || searchCurrentLimit;
+
+            searchPageInfo.textContent = `Page ${searchCurrentPage} of ${searchTotalPages} | Total: ${pagination.total || 0}`;
+            searchTableSummary.textContent = hasSearched
+                ? `${searchCurrentLimit} rows per page`
+                : "No search yet";
+
+            searchPrevBtn.disabled = searchCurrentPage <= 1;
+            searchNextBtn.disabled = searchTotalPages === 0 || searchCurrentPage >= searchTotalPages;
         }
 
         function renderSelectedItems() {
@@ -457,7 +585,7 @@
                             <td>${item.amount}</td>
                             <td>${item.payment_date}</td>
                             <td>
-                                <button class="remove-btn" onclick="removeSelected(${item.payment_id})">Remove</button>
+                                <button class="remove-btn" type="button" onclick="removeSelected(${item.payment_id})">Remove</button>
                             </td>
                         </tr>
                     `;
@@ -465,6 +593,7 @@
             }
 
             computeSummary();
+            renderSearchResults();
         }
 
         function addToSelected(paymentId) {
@@ -584,12 +713,15 @@
             cashOnHandInput.value = 0;
             document.getElementById("notes").value = "";
 
-            await searchPayments();
-            await loadRemitsHistory();
+            await searchPayments(1, searchCurrentLimit);
+            await loadRemitsHistory(1, historyCurrentLimit);
         }
 
-        async function loadRemitsHistory() {
-            const res = await fetch("/remits");
+        async function loadRemitsHistory(page = 1, limit = historyCurrentLimit) {
+            historyCurrentPage = page;
+            historyCurrentLimit = Number(limit);
+
+            const res = await fetch(`/remits?page=${historyCurrentPage}&limit=${historyCurrentLimit}`);
             const data = await res.json();
 
             if (!res.ok) {
@@ -597,30 +729,58 @@
                 return;
             }
 
+            const rows = data.rows || [];
             remitsHistoryBody.innerHTML = "";
 
-            data.forEach(remit => {
-                remitsHistoryBody.innerHTML += `
-                    <tr>
-                        <td>${remit.id}</td>
-                        <td>${remit.collector_name}</td>
-                        <td>${remit.remit_date}</td>
-                        <td>${remit.total_selected_payments}</td>
-                        <td>${remit.gas}</td>
-                        <td>${remit.food}</td>
-                        <td>${remit.miscellaneous}</td>
-                        <td>${remit.commission_percent}</td>
-                        <td>${remit.commission_amount}</td>
-                        <td>${remit.gross_total}</td>
-                        <td>${remit.cash_on_hand}</td>
-                        <td>${remit.net_total}</td>
-                        <td>${remit.variance_amount}</td>
-                    </tr>
+            if (rows.length === 0) {
+                remitsHistoryBody.innerHTML = `
+                    <tr><td colspan="13">No saved remits found.</td></tr>
                 `;
+            } else {
+                rows.forEach(remit => {
+                    remitsHistoryBody.innerHTML += `
+                        <tr>
+                            <td>${remit.id}</td>
+                            <td>${remit.collector_name}</td>
+                            <td>${remit.remit_date}</td>
+                            <td>${remit.total_selected_payments}</td>
+                            <td>${remit.gas}</td>
+                            <td>${remit.food}</td>
+                            <td>${remit.miscellaneous}</td>
+                            <td>${remit.commission_percent}</td>
+                            <td>${remit.commission_amount}</td>
+                            <td>${remit.gross_total}</td>
+                            <td>${remit.cash_on_hand}</td>
+                            <td>${remit.net_total}</td>
+                            <td>${remit.variance_amount}</td>
+                        </tr>
+                    `;
+                });
+            }
+
+            updateHistoryPagination(data.pagination || {
+                page: 1,
+                totalPages: 1,
+                total: 0,
+                limit: historyCurrentLimit
             });
         }
 
-        document.getElementById("searchBtn").addEventListener("click", searchPayments);
+        function updateHistoryPagination(pagination) {
+            historyCurrentPage = pagination.page || 1;
+            historyTotalPages = pagination.totalPages || 1;
+            historyCurrentLimit = pagination.limit || historyCurrentLimit;
+
+            historyPageInfo.textContent = `Page ${historyCurrentPage} of ${historyTotalPages} | Total: ${pagination.total || 0}`;
+            historyTableSummary.textContent = `${historyCurrentLimit} rows per page`;
+
+            historyPrevBtn.disabled = historyCurrentPage <= 1;
+            historyNextBtn.disabled = historyTotalPages === 0 || historyCurrentPage >= historyTotalPages;
+        }
+
+        document.getElementById("searchBtn").addEventListener("click", () => {
+            searchPayments(1, searchCurrentLimit);
+        });
 
         document.getElementById("clearBtn").addEventListener("click", () => {
             document.getElementById("customer_id_from").value = "";
@@ -631,7 +791,14 @@
             collectorIdAuto.value = "";
             commissionPercentAuto.value = "";
             searchResults = [];
+            hasSearched = false;
             renderSearchResults();
+            updateSearchPagination({
+                page: 0,
+                totalPages: 0,
+                total: 0,
+                limit: searchCurrentLimit
+            });
             computeSummary();
         });
 
@@ -642,11 +809,61 @@
         cashOnHandInput.addEventListener("input", computeSummary);
         document.getElementById("saveRemitBtn").addEventListener("click", saveRemit);
 
+        searchPageSizeSelect.addEventListener("change", () => {
+            searchCurrentLimit = Number(searchPageSizeSelect.value);
+
+            if (hasSearched) {
+                searchPayments(1, searchCurrentLimit);
+            } else {
+                updateSearchPagination({
+                    page: 0,
+                    totalPages: 0,
+                    total: 0,
+                    limit: searchCurrentLimit
+                });
+            }
+        });
+
+        searchPrevBtn.addEventListener("click", () => {
+            if (searchCurrentPage > 1) {
+                searchPayments(searchCurrentPage - 1, searchCurrentLimit);
+            }
+        });
+
+        searchNextBtn.addEventListener("click", () => {
+            if (searchCurrentPage < searchTotalPages) {
+                searchPayments(searchCurrentPage + 1, searchCurrentLimit);
+            }
+        });
+
+        historyPageSizeSelect.addEventListener("change", () => {
+            historyCurrentLimit = Number(historyPageSizeSelect.value);
+            loadRemitsHistory(1, historyCurrentLimit);
+        });
+
+        historyPrevBtn.addEventListener("click", () => {
+            if (historyCurrentPage > 1) {
+                loadRemitsHistory(historyCurrentPage - 1, historyCurrentLimit);
+            }
+        });
+
+        historyNextBtn.addEventListener("click", () => {
+            if (historyCurrentPage < historyTotalPages) {
+                loadRemitsHistory(historyCurrentPage + 1, historyCurrentLimit);
+            }
+        });
+
         setTodayDate();
         loadCollectors();
         renderSearchResults();
         renderSelectedItems();
-        loadRemitsHistory();
+        updateSearchPagination({
+            page: 0,
+            totalPages: 0,
+            total: 0,
+            limit: 25
+        });
+        loadRemitsHistory(1, 25);
     </script>
 </body>
 </html>

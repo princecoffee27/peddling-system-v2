@@ -2,23 +2,54 @@ const express = require("express");
 const router = express.Router();
 const db = require("../database/db");
 
-// Get all inventory
+// Get inventory with pagination
 router.get("/", (req, res) => {
-    const sql = `
+    const page = parseInt(req.query.page, 10) || 1;
+    const limit = parseInt(req.query.limit, 10) || 50;
+    const safeLimit = [50, 100].includes(limit) ? limit : 50;
+    const offset = (page - 1) * safeLimit;
+
+    const countSql = `
+        SELECT COUNT(*) AS total
+        FROM inventory
+    `;
+
+    const dataSql = `
         SELECT id, item_name, capital_price, selling_price, quantity, is_active
         FROM inventory
         ORDER BY id ASC
+        LIMIT ? OFFSET ?
     `;
 
-    db.query(sql, (err, result) => {
-        if (err) {
-            console.log("LOAD INVENTORY ERROR:", err);
+    db.query(countSql, (countErr, countResult) => {
+        if (countErr) {
+            console.log("COUNT INVENTORY ERROR:", countErr);
             return res.status(500).json({
-                message: err.sqlMessage || err.message
+                message: countErr.sqlMessage || countErr.message
             });
         }
 
-        res.json(result);
+        const total = countResult[0]?.total || 0;
+        const totalPages = total > 0 ? Math.ceil(total / safeLimit) : 0;
+
+        db.query(dataSql, [safeLimit, offset], (err, result) => {
+            if (err) {
+                console.log("LOAD INVENTORY ERROR:", err);
+                return res.status(500).json({
+                    message: err.sqlMessage || err.message
+                });
+            }
+
+            res.json({
+                rows: result,
+                pagination: {
+                    page,
+                    limit: safeLimit,
+                    total,
+                    totalPages
+                }
+            });
+        });
     });
 });
 

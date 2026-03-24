@@ -23,11 +23,60 @@ router.get("/collectors", (req, res) => {
     });
 });
 
-// Search customers/sales for collection
+// Search customers/sales for collection with pagination
 router.get("/search", (req, res) => {
-    const { customer_id, collector_id } = req.query;
+    const {
+        customer_id,
+        collector_id,
+        page = 1,
+        limit = 20,
+        show_all = "false"
+    } = req.query;
 
-    let sql = `
+    const currentPage = parseInt(page, 10) || 1;
+    const pageLimit = parseInt(limit, 10) || 20;
+    const offset = (currentPage - 1) * pageLimit;
+
+    const hasFilter = !!customer_id || !!collector_id;
+    const allowShowAll = show_all === "true";
+
+    if (!hasFilter && !allowShowAll) {
+        return res.json({
+            rows: [],
+            pagination: {
+                page: 0,
+                limit: pageLimit,
+                total: 0,
+                totalPages: 0
+            }
+        });
+    }
+
+    let fromSql = `
+        FROM sales
+        INNER JOIN customers ON sales.customer_id = customers.id
+        LEFT JOIN collectors ON customers.collector_id = collectors.id
+        WHERE sales.balance > 0
+    `;
+
+    const params = [];
+
+    if (customer_id) {
+        fromSql += " AND customers.id = ? ";
+        params.push(customer_id);
+    }
+
+    if (collector_id) {
+        fromSql += " AND customers.collector_id = ? ";
+        params.push(collector_id);
+    }
+
+    const countSql = `
+        SELECT COUNT(*) AS total
+        ${fromSql}
+    `;
+
+    const dataSql = `
         SELECT
             sales.id AS sale_id,
             customers.id AS customer_id,
@@ -51,35 +100,40 @@ router.get("/search", (req, res) => {
                 ORDER BY p.payment_date DESC, p.id DESC
                 LIMIT 1
             ), '%Y-%m-%d') AS last_payment_date
-        FROM sales
-        INNER JOIN customers ON sales.customer_id = customers.id
-        LEFT JOIN collectors ON customers.collector_id = collectors.id
-        WHERE sales.balance > 0
+        ${fromSql}
+        ORDER BY customers.id ASC, sales.id ASC
+        LIMIT ? OFFSET ?
     `;
 
-    const params = [];
-
-    if (customer_id) {
-        sql += " AND customers.id = ? ";
-        params.push(customer_id);
-    }
-
-    if (collector_id) {
-        sql += " AND customers.collector_id = ? ";
-        params.push(collector_id);
-    }
-
-    sql += " ORDER BY customers.id ASC, sales.id ASC ";
-
-    db.query(sql, params, (err, result) => {
-        if (err) {
-            console.log("SEARCH COLLECTION ERROR:", err);
+    db.query(countSql, params, (countErr, countResult) => {
+        if (countErr) {
+            console.log("COUNT COLLECTION ERROR:", countErr);
             return res.status(500).json({
-                message: err.sqlMessage || err.message
+                message: countErr.sqlMessage || countErr.message
             });
         }
 
-        res.json(result);
+        const total = countResult[0]?.total || 0;
+        const totalPages = total > 0 ? Math.ceil(total / pageLimit) : 0;
+
+        db.query(dataSql, [...params, pageLimit, offset], (err, result) => {
+            if (err) {
+                console.log("SEARCH COLLECTION ERROR:", err);
+                return res.status(500).json({
+                    message: err.sqlMessage || err.message
+                });
+            }
+
+            res.json({
+                rows: result,
+                pagination: {
+                    page: currentPage,
+                    limit: pageLimit,
+                    total,
+                    totalPages
+                }
+            });
+        });
     });
 });
 
@@ -239,7 +293,7 @@ router.put("/history/:payment_id", (req, res) => {
 
     if (!amount || !payment_date || !payment_type) {
         return res.status(400).json({
-            message: "Please complete payment amount, payment date, and type"
+            message: "Please complete amount, payment date, and type"
         });
     }
 
@@ -271,12 +325,17 @@ router.put("/history/:payment_id", (req, res) => {
 
         const saleId = paymentResult[0].sale_id;
         const oldAmount = Number(paymentResult[0].amount);
+        const difference = newAmount - oldAmount;
 
-        const getSaleSql = `SELECT id, balance FROM sales WHERE id = ?`;
+        const getSaleSql = `
+            SELECT id, balance
+            FROM sales
+            WHERE id = ?
+        `;
 
         db.query(getSaleSql, [saleId], (err, saleResult) => {
             if (err) {
-                console.log("GET SALE FOR PAYMENT UPDATE ERROR:", err);
+                console.log("GET SALE FOR PAYMENT EDIT ERROR:", err);
                 return res.status(500).json({
                     message: err.sqlMessage || err.message
                 });
@@ -284,24 +343,21 @@ router.put("/history/:payment_id", (req, res) => {
 
             if (saleResult.length === 0) {
                 return res.status(404).json({
-                    message: "Related sale not found"
+                    message: "Sale not found for this payment"
                 });
             }
 
             const currentBalance = Number(saleResult[0].balance);
-            const allowedMaximum = currentBalance + oldAmount;
 
-            if (newAmount > allowedMaximum) {
+            if (difference > 0 && difference > currentBalance) {
                 return res.status(400).json({
-                    message: "Updated payment amount is too high for the remaining balance"
+                    message: "Updated payment is greater than remaining balance"
                 });
             }
 
-            const newBalance = currentBalance + oldAmount - newAmount;
-
             db.beginTransaction((err) => {
                 if (err) {
-                    console.log("PAYMENT UPDATE TRANSACTION ERROR:", err);
+                    console.log("PAYMENT EDIT TRANSACTION ERROR:", err);
                     return res.status(500).json({
                         message: err.sqlMessage || err.message
                     });
@@ -328,11 +384,11 @@ router.put("/history/:payment_id", (req, res) => {
 
                         const updateSaleSql = `
                             UPDATE sales
-                            SET balance = ?
+                            SET balance = balance - ?
                             WHERE id = ?
                         `;
 
-                        db.query(updateSaleSql, [newBalance, saleId], (err) => {
+                        db.query(updateSaleSql, [difference, saleId], (err) => {
                             if (err) {
                                 return db.rollback(() => {
                                     console.log("UPDATE SALE BALANCE FROM PAYMENT EDIT ERROR:", err);
@@ -345,7 +401,7 @@ router.put("/history/:payment_id", (req, res) => {
                             db.commit((err) => {
                                 if (err) {
                                     return db.rollback(() => {
-                                        console.log("COMMIT PAYMENT UPDATE ERROR:", err);
+                                        console.log("PAYMENT EDIT COMMIT ERROR:", err);
                                         res.status(500).json({
                                             message: err.sqlMessage || err.message
                                         });
@@ -364,22 +420,21 @@ router.put("/history/:payment_id", (req, res) => {
     });
 });
 
-// Load full payment history for one sale
+// Load payment history for a sale
 router.get("/history/:sale_id", (req, res) => {
     const saleId = req.params.sale_id;
 
     const sql = `
-        SELECT 
-            payments.id AS payment_id,
-            customers.id AS customer_id,
-            payments.amount,
-            DATE_FORMAT(payments.payment_date, '%Y-%m-%d') AS payment_date,
-            payments.payment_type
-        FROM payments
-        JOIN sales ON payments.sale_id = sales.id
-        JOIN customers ON sales.customer_id = customers.id
-        WHERE payments.sale_id = ?
-        ORDER BY payments.payment_date DESC, payments.id DESC
+        SELECT
+            p.id AS payment_id,
+            s.customer_id,
+            p.amount,
+            DATE_FORMAT(p.payment_date, '%Y-%m-%d') AS payment_date,
+            p.payment_type
+        FROM payments p
+        INNER JOIN sales s ON p.sale_id = s.id
+        WHERE p.sale_id = ?
+        ORDER BY p.payment_date DESC, p.id DESC
     `;
 
     db.query(sql, [saleId], (err, result) => {

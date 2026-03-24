@@ -22,26 +22,24 @@ router.get("/collectors", (req, res) => {
     });
 });
 
-// Search payments for remit page
+// Search payments for remit page with pagination
 router.get("/search", (req, res) => {
     const {
         customer_id_from,
         customer_id_to,
         payment_date_from,
         payment_date_to,
-        collector_id
+        collector_id,
+        page = 1,
+        limit = 25
     } = req.query;
 
-    let sql = `
-        SELECT
-            payments.id AS payment_id,
-            customers.id AS customer_id,
-            customers.name AS customer_name,
-            collectors.id AS collector_id,
-            collectors.name AS collector_name,
-            collectors.commission_percent,
-            payments.amount,
-            DATE_FORMAT(payments.payment_date, '%Y-%m-%d') AS payment_date
+    const currentPage = parseInt(page, 10) || 1;
+    const requestedLimit = parseInt(limit, 10) || 25;
+    const safeLimit = [25, 50].includes(requestedLimit) ? requestedLimit : 25;
+    const offset = (currentPage - 1) * safeLimit;
+
+    let fromSql = `
         FROM payments
         JOIN sales ON payments.sale_id = sales.id
         JOIN customers ON sales.customer_id = customers.id
@@ -54,41 +52,79 @@ router.get("/search", (req, res) => {
     const params = [];
 
     if (customer_id_from) {
-        sql += ` AND customers.id >= ? `;
+        fromSql += ` AND customers.id >= ? `;
         params.push(customer_id_from);
     }
 
     if (customer_id_to) {
-        sql += ` AND customers.id <= ? `;
+        fromSql += ` AND customers.id <= ? `;
         params.push(customer_id_to);
     }
 
     if (payment_date_from) {
-        sql += ` AND payments.payment_date >= ? `;
+        fromSql += ` AND payments.payment_date >= ? `;
         params.push(payment_date_from);
     }
 
     if (payment_date_to) {
-        sql += ` AND payments.payment_date <= ? `;
+        fromSql += ` AND payments.payment_date <= ? `;
         params.push(payment_date_to);
     }
 
     if (collector_id) {
-        sql += ` AND customers.collector_id = ? `;
+        fromSql += ` AND customers.collector_id = ? `;
         params.push(collector_id);
     }
 
-    sql += ` ORDER BY payments.payment_date ASC, customers.id ASC `;
+    const countSql = `
+        SELECT COUNT(*) AS total
+        ${fromSql}
+    `;
 
-    db.query(sql, params, (err, result) => {
-        if (err) {
-            console.log("SEARCH REMIT PAYMENTS ERROR:", err);
+    const dataSql = `
+        SELECT
+            payments.id AS payment_id,
+            customers.id AS customer_id,
+            customers.name AS customer_name,
+            collectors.id AS collector_id,
+            collectors.name AS collector_name,
+            collectors.commission_percent,
+            payments.amount,
+            DATE_FORMAT(payments.payment_date, '%Y-%m-%d') AS payment_date
+        ${fromSql}
+        ORDER BY payments.payment_date ASC, customers.id ASC, payments.id ASC
+        LIMIT ? OFFSET ?
+    `;
+
+    db.query(countSql, params, (countErr, countResult) => {
+        if (countErr) {
+            console.log("COUNT REMIT PAYMENTS ERROR:", countErr);
             return res.status(500).json({
-                message: err.sqlMessage || err.message
+                message: countErr.sqlMessage || countErr.message
             });
         }
 
-        res.json(result);
+        const total = countResult[0]?.total || 0;
+        const totalPages = total > 0 ? Math.ceil(total / safeLimit) : 0;
+
+        db.query(dataSql, [...params, safeLimit, offset], (err, result) => {
+            if (err) {
+                console.log("SEARCH REMIT PAYMENTS ERROR:", err);
+                return res.status(500).json({
+                    message: err.sqlMessage || err.message
+                });
+            }
+
+            res.json({
+                rows: result,
+                pagination: {
+                    page: currentPage,
+                    limit: safeLimit,
+                    total,
+                    totalPages
+                }
+            });
+        });
     });
 });
 
@@ -254,9 +290,19 @@ router.post("/", (req, res) => {
     });
 });
 
-// Load remit history
+// Load remit history with pagination
 router.get("/", (req, res) => {
-    const sql = `
+    const page = parseInt(req.query.page, 10) || 1;
+    const requestedLimit = parseInt(req.query.limit, 10) || 25;
+    const safeLimit = [25, 50, 100].includes(requestedLimit) ? requestedLimit : 25;
+    const offset = (page - 1) * safeLimit;
+
+    const countSql = `
+        SELECT COUNT(*) AS total
+        FROM remits
+    `;
+
+    const dataSql = `
         SELECT
             remits.id,
             remits.collector_id,
@@ -276,17 +322,38 @@ router.get("/", (req, res) => {
         FROM remits
         JOIN collectors ON remits.collector_id = collectors.id
         ORDER BY remits.id DESC
+        LIMIT ? OFFSET ?
     `;
 
-    db.query(sql, (err, result) => {
-        if (err) {
-            console.log("LOAD REMITS ERROR:", err);
+    db.query(countSql, (countErr, countResult) => {
+        if (countErr) {
+            console.log("COUNT REMITS ERROR:", countErr);
             return res.status(500).json({
-                message: err.sqlMessage || err.message
+                message: countErr.sqlMessage || countErr.message
             });
         }
 
-        res.json(result);
+        const total = countResult[0]?.total || 0;
+        const totalPages = total > 0 ? Math.ceil(total / safeLimit) : 0;
+
+        db.query(dataSql, [safeLimit, offset], (err, result) => {
+            if (err) {
+                console.log("LOAD REMITS ERROR:", err);
+                return res.status(500).json({
+                    message: err.sqlMessage || err.message
+                });
+            }
+
+            res.json({
+                rows: result,
+                pagination: {
+                    page,
+                    limit: safeLimit,
+                    total,
+                    totalPages
+                }
+            });
+        });
     });
 });
 

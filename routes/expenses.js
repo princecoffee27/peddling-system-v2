@@ -23,9 +23,19 @@ router.get("/collectors", (req, res) => {
     });
 });
 
-// Load all expenses
+// Load expenses with pagination
 router.get("/", (req, res) => {
-    const sql = `
+    const page = parseInt(req.query.page, 10) || 1;
+    const limit = parseInt(req.query.limit, 10) || 50;
+    const safeLimit = [50, 100].includes(limit) ? limit : 50;
+    const offset = (page - 1) * safeLimit;
+
+    const countSql = `
+        SELECT COUNT(*) AS total
+        FROM expenses
+    `;
+
+    const dataSql = `
         SELECT
             e.id,
             DATE_FORMAT(e.expense_date, '%Y-%m-%d') AS expense_date,
@@ -42,17 +52,38 @@ router.get("/", (req, res) => {
         FROM expenses e
         LEFT JOIN collectors c ON e.collector_id = c.id
         ORDER BY e.expense_date DESC, e.id DESC
+        LIMIT ? OFFSET ?
     `;
 
-    db.query(sql, (err, result) => {
-        if (err) {
-            console.log("LOAD EXPENSES ERROR:", err);
+    db.query(countSql, (countErr, countResult) => {
+        if (countErr) {
+            console.log("COUNT EXPENSES ERROR:", countErr);
             return res.status(500).json({
-                message: err.sqlMessage || err.message
+                message: countErr.sqlMessage || countErr.message
             });
         }
 
-        res.json(result);
+        const total = countResult[0]?.total || 0;
+        const totalPages = total > 0 ? Math.ceil(total / safeLimit) : 0;
+
+        db.query(dataSql, [safeLimit, offset], (err, result) => {
+            if (err) {
+                console.log("LOAD EXPENSES ERROR:", err);
+                return res.status(500).json({
+                    message: err.sqlMessage || err.message
+                });
+            }
+
+            res.json({
+                rows: result,
+                pagination: {
+                    page,
+                    limit: safeLimit,
+                    total,
+                    totalPages
+                }
+            });
+        });
     });
 });
 

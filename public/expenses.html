@@ -164,6 +164,23 @@
             font-weight: bold;
         }
 
+        .table-toolbar {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            margin-bottom: 12px;
+        }
+
+        .pagination-box {
+            margin-top: 15px;
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
         @media (max-width: 1000px) {
             .page-wrap {
                 grid-template-columns: 1fr;
@@ -249,7 +266,19 @@
 
         <div class="card">
             <h2>Expenses List</h2>
-            <p class="muted">Scrollable table with edit and delete actions.</p>
+            <p class="muted">Default load is 50. Use 50 or 100 with pagination.</p>
+
+            <div class="table-toolbar">
+                <div>
+                    <label for="pageSizeSelect" style="margin-bottom:0;">Rows per page</label>
+                    <select id="pageSizeSelect" style="margin-left:10px; width:auto;">
+                        <option value="50">50</option>
+                        <option value="100">100</option>
+                    </select>
+                </div>
+
+                <div id="tableSummary" class="muted">Expenses list</div>
+            </div>
 
             <div class="table-wrap">
                 <table>
@@ -276,6 +305,12 @@
                     </tbody>
                 </table>
             </div>
+
+            <div class="pagination-box">
+                <button type="button" id="prevPageBtn" class="btn-secondary">Previous</button>
+                <span id="pageInfo">Page 1 of 1 | Total: 0</span>
+                <button type="button" id="nextPageBtn" class="btn-secondary">Next</button>
+            </div>
         </div>
     </div>
 
@@ -296,8 +331,17 @@
         const modeBox = document.getElementById("modeBox");
         const saveBtn = document.getElementById("saveBtn");
         const cancelEditBtn = document.getElementById("cancelEditBtn");
+        const pageSizeSelect = document.getElementById("pageSizeSelect");
+        const prevPageBtn = document.getElementById("prevPageBtn");
+        const nextPageBtn = document.getElementById("nextPageBtn");
+        const pageInfo = document.getElementById("pageInfo");
+        const tableSummary = document.getElementById("tableSummary");
 
         let expenses = [];
+        let collectorsCache = [];
+        let currentPage = 1;
+        let totalPages = 1;
+        let currentLimit = 50;
 
         function formatMoney(value) {
             return Number(value || 0).toFixed(2);
@@ -343,6 +387,7 @@
                 const res = await fetch("/expenses/collectors");
                 const data = await res.json();
 
+                collectorsCache = data;
                 collectorSelect.innerHTML = `<option value="">Select collector</option>`;
 
                 data.forEach((collector) => {
@@ -358,40 +403,55 @@
             }
         }
 
-        async function loadExpenses() {
-            try {
-                const res = await fetch("/expenses");
-                const data = await res.json();
-                expenses = data;
+        async function loadExpenses(page = currentPage, limit = currentLimit) {
+            currentPage = page;
+            currentLimit = Number(limit);
 
-                if (!Array.isArray(data) || data.length === 0) {
+            try {
+                const res = await fetch(`/expenses?page=${currentPage}&limit=${currentLimit}`);
+                const data = await res.json();
+
+                if (!res.ok) {
+                    alert(data.message || "Failed to load expenses");
+                    return;
+                }
+
+                expenses = data.rows || [];
+
+                if (!Array.isArray(expenses) || expenses.length === 0) {
                     expenseTableBody.innerHTML = `
                         <tr>
                             <td colspan="12">No expense records found.</td>
                         </tr>
                     `;
-                    return;
+                } else {
+                    expenseTableBody.innerHTML = expenses.map((item) => `
+                        <tr>
+                            <td>${item.id}</td>
+                            <td>${item.expense_date || ""}</td>
+                            <td>${item.collector_name || ""}</td>
+                            <td>${formatMoney(item.driver_daily_wage)}</td>
+                            <td>${formatMoney(item.staffs_food_allowance)}</td>
+                            <td>${formatMoney(item.gasoline)}</td>
+                            <td>${formatMoney(item.miscellaneous)}</td>
+                            <td>${formatMoney(item.total_expense)}</td>
+                            <td>${item.route || ""}</td>
+                            <td>${item.expense_type || ""}</td>
+                            <td>${item.notes || ""}</td>
+                            <td>
+                                <button class="btn-small btn-warning" onclick="editExpense(${item.id})">Edit</button>
+                                <button class="btn-small btn-danger" onclick="deleteExpense(${item.id})">Delete</button>
+                            </td>
+                        </tr>
+                    `).join("");
                 }
 
-                expenseTableBody.innerHTML = data.map((item) => `
-                    <tr>
-                        <td>${item.id}</td>
-                        <td>${item.expense_date || ""}</td>
-                        <td>${item.collector_name || ""}</td>
-                        <td>${formatMoney(item.driver_daily_wage)}</td>
-                        <td>${formatMoney(item.staffs_food_allowance)}</td>
-                        <td>${formatMoney(item.gasoline)}</td>
-                        <td>${formatMoney(item.miscellaneous)}</td>
-                        <td>${formatMoney(item.total_expense)}</td>
-                        <td>${item.route || ""}</td>
-                        <td>${item.expense_type || ""}</td>
-                        <td>${item.notes || ""}</td>
-                        <td>
-                            <button class="btn-small btn-warning" onclick="editExpense(${item.id})">Edit</button>
-                            <button class="btn-small btn-danger" onclick="deleteExpense(${item.id})">Delete</button>
-                        </td>
-                    </tr>
-                `).join("");
+                updatePagination(data.pagination || {
+                    page: 1,
+                    totalPages: 1,
+                    total: 0,
+                    limit: currentLimit
+                });
             } catch (error) {
                 console.error(error);
                 expenseTableBody.innerHTML = `
@@ -400,6 +460,18 @@
                     </tr>
                 `;
             }
+        }
+
+        function updatePagination(pagination) {
+            currentPage = pagination.page || 1;
+            totalPages = pagination.totalPages || 1;
+            currentLimit = pagination.limit || currentLimit;
+
+            pageInfo.textContent = `Page ${currentPage} of ${totalPages} | Total: ${pagination.total || 0}`;
+            tableSummary.textContent = `${currentLimit} rows per page`;
+
+            prevPageBtn.disabled = currentPage <= 1;
+            nextPageBtn.disabled = currentPage >= totalPages || totalPages === 0;
         }
 
         window.editExpense = function(id) {
@@ -447,8 +519,8 @@
                 }
 
                 alert("Expense deleted successfully");
-                await loadExpenses();
                 resetForm();
+                await loadExpenses(currentPage, currentLimit);
             } catch (error) {
                 console.error(error);
                 alert("Could not delete expense");
@@ -457,6 +529,28 @@
 
         expenseForm.addEventListener("submit", async function(e) {
             e.preventDefault();
+
+            const selectedCollector = collectorsCache.find(
+                c => String(c.id) === String(collectorSelect.value)
+            );
+
+            const confirmMessage =
+                `Please confirm this expense entry:\n\n` +
+                `Date: ${expenseDateInput.value}\n` +
+                `Driver Daily Wage: ${driverInput.value}\n` +
+                `Staffs Food Allowance: ${foodInput.value}\n` +
+                `Gasoline: ${gasolineInput.value}\n` +
+                `Miscellaneous: ${miscInput.value}\n` +
+                `Collector: ${selectedCollector ? selectedCollector.name : collectorSelect.value}\n` +
+                `Route: ${routeInput.value || ""}\n` +
+                `Expense Type: ${expenseTypeInput.value}\n` +
+                `Notes: ${notesInput.value || ""}\n` +
+                `Total Expense: ${totalExpensePreview.textContent}\n\n` +
+                `${expenseIdInput.value ? "Continue updating expense?" : "Continue saving expense?"}`;
+
+            const confirmed = confirm(confirmMessage);
+
+            if (!confirmed) return;
 
             const payload = {
                 expense_date: expenseDateInput.value,
@@ -494,7 +588,12 @@
 
                 alert(isEdit ? "Expense updated successfully" : "Expense saved successfully");
                 resetForm();
-                await loadExpenses();
+
+                if (isEdit) {
+                    await loadExpenses(currentPage, currentLimit);
+                } else {
+                    await loadExpenses(1, currentLimit);
+                }
             } catch (error) {
                 console.error(error);
                 alert("Could not save expense");
@@ -505,14 +604,38 @@
             resetForm();
         });
 
+        pageSizeSelect.addEventListener("change", async function() {
+            currentLimit = Number(pageSizeSelect.value);
+            currentPage = 1;
+            await loadExpenses(1, currentLimit);
+        });
+
+        prevPageBtn.addEventListener("click", async function() {
+            if (currentPage > 1) {
+                await loadExpenses(currentPage - 1, currentLimit);
+            }
+        });
+
+        nextPageBtn.addEventListener("click", async function() {
+            if (currentPage < totalPages) {
+                await loadExpenses(currentPage + 1, currentLimit);
+            }
+        });
+
         [driverInput, foodInput, gasolineInput, miscInput].forEach(input => {
             input.addEventListener("input", computeTotal);
         });
 
-        setTodayDateIfEmpty();
-        computeTotal();
-        loadCollectors();
-        loadExpenses();
+        async function initPage() {
+            pageSizeSelect.value = "50";
+            currentLimit = 50;
+            setTodayDateIfEmpty();
+            computeTotal();
+            await loadCollectors();
+            await loadExpenses(1, 50);
+        }
+
+        initPage();
     </script>
 </body>
 </html>

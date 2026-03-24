@@ -59,6 +59,11 @@
             background: #1d4ed8;
         }
 
+        button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
         .secondary-btn {
             background: #64748b;
         }
@@ -168,6 +173,14 @@
             margin-top: 8px;
         }
 
+        .pagination-box {
+            margin-top: 15px;
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
         @media (max-width: 1000px) {
             .search-grid {
                 grid-template-columns: 1fr;
@@ -232,6 +245,12 @@
                 <tbody id="resultsTableBody"></tbody>
             </table>
         </div>
+
+        <div id="paginationBox" class="pagination-box">
+            <button type="button" id="prevPageBtn" class="secondary-btn">Previous</button>
+            <span id="pageInfo">Page 0 of 0 | Total: 0</span>
+            <button type="button" id="nextPageBtn" class="secondary-btn">Next</button>
+        </div>
     </div>
 
     <script>
@@ -240,8 +259,15 @@
         const searchBtn = document.getElementById("searchBtn");
         const showAllBtn = document.getElementById("showAllBtn");
         const resultsTableBody = document.getElementById("resultsTableBody");
+        const prevPageBtn = document.getElementById("prevPageBtn");
+        const nextPageBtn = document.getElementById("nextPageBtn");
+        const pageInfo = document.getElementById("pageInfo");
 
         let collectorsCache = [];
+        let currentPage = 1;
+        let totalPages = 0;
+        let currentShowAll = false;
+        const pageLimit = 20;
 
         async function loadCollectors() {
             try {
@@ -273,9 +299,24 @@
             return new Date().toISOString().split("T")[0];
         }
 
-        async function searchRecords() {
+        async function searchRecords(page = 1, showAll = currentShowAll) {
             const customer_id = customerIdInput.value.trim();
             const collector_id = collectorSelect.value;
+
+            currentPage = page;
+            currentShowAll = showAll;
+
+            const hasFilter = !!customer_id || !!collector_id;
+
+            if (!hasFilter && !showAll) {
+                renderResults([]);
+                updatePagination({
+                    page: 0,
+                    totalPages: 0,
+                    total: 0
+                });
+                return;
+            }
 
             const params = new URLSearchParams();
 
@@ -287,6 +328,10 @@
                 params.append("collector_id", collector_id);
             }
 
+            params.append("page", currentPage);
+            params.append("limit", pageLimit);
+            params.append("show_all", showAll ? "true" : "false");
+
             try {
                 const res = await fetch(`/payments/search?${params.toString()}`);
                 const data = await res.json();
@@ -296,11 +341,26 @@
                     return;
                 }
 
-                renderResults(data);
+                renderResults(data.rows || []);
+                updatePagination(data.pagination || {
+                    page: 0,
+                    totalPages: 0,
+                    total: 0
+                });
             } catch (error) {
                 console.log(error);
                 alert("Could not search records");
             }
+        }
+
+        function updatePagination(pagination) {
+            currentPage = pagination.page || 0;
+            totalPages = pagination.totalPages || 0;
+
+            pageInfo.textContent = `Page ${currentPage} of ${totalPages} | Total: ${pagination.total || 0}`;
+
+            prevPageBtn.disabled = currentPage <= 1;
+            nextPageBtn.disabled = totalPages === 0 || currentPage >= totalPages;
         }
 
         function collectorOptionsHtml(selectedId) {
@@ -450,7 +510,7 @@
                 }
 
                 alert("Customer updated successfully");
-                await searchRecords();
+                await searchRecords(currentPage, currentShowAll);
             } catch (error) {
                 console.log(error);
                 alert("Could not update customer");
@@ -490,7 +550,7 @@
                 }
 
                 alert("Payment recorded successfully");
-                await searchRecords();
+                await searchRecords(currentPage, currentShowAll);
             } catch (error) {
                 console.log(error);
                 alert("Could not save payment");
@@ -621,23 +681,43 @@
                 }
 
                 alert("Payment updated successfully");
-                await searchRecords();
+                await searchRecords(currentPage, currentShowAll);
             } catch (error) {
                 console.log(error);
                 alert("Could not update payment");
             }
         }
 
-        searchBtn.addEventListener("click", searchRecords);
+        searchBtn.addEventListener("click", () => {
+            currentShowAll = false;
+            searchRecords(1, false);
+        });
 
         showAllBtn.addEventListener("click", async () => {
             customerIdInput.value = "";
             collectorSelect.value = "";
-            await searchRecords();
+            await searchRecords(1, true);
+        });
+
+        prevPageBtn.addEventListener("click", () => {
+            if (currentPage > 1) {
+                searchRecords(currentPage - 1, currentShowAll);
+            }
+        });
+
+        nextPageBtn.addEventListener("click", () => {
+            if (currentPage < totalPages) {
+                searchRecords(currentPage + 1, currentShowAll);
+            }
         });
 
         loadCollectors();
-        searchRecords();
+        renderResults([]);
+        updatePagination({
+            page: 0,
+            totalPages: 0,
+            total: 0
+        });
     </script>
 </body>
 </html>
