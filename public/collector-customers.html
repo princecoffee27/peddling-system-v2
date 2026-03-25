@@ -58,24 +58,16 @@
             padding: 10px 14px;
             cursor: pointer;
             font-size: 13px;
-        }
-
-        .btn-primary {
-            background: #2563eb;
             color: white;
         }
 
-        .btn-secondary {
-            background: #6b7280;
-            color: white;
-        }
-
-        .btn-history {
-            background: #64748b;
-            color: white;
-            padding: 6px 10px;
-            font-size: 12px;
-        }
+        .btn-primary { background: #2563eb; }
+        .btn-secondary { background: #6b7280; }
+        .btn-history { background: #64748b; padding: 6px 10px; font-size: 12px; }
+        .btn-edit { background: #16a34a; padding: 6px 10px; font-size: 12px; }
+        .btn-toggle { background: #f59e0b; padding: 6px 10px; font-size: 12px; }
+        .btn-delete { background: #dc2626; padding: 6px 10px; font-size: 12px; }
+        .btn-save { background: #2563eb; padding: 8px 12px; font-size: 12px; }
 
         .muted {
             color: #6b7280;
@@ -93,7 +85,7 @@
         table {
             width: 100%;
             border-collapse: collapse;
-            min-width: 1450px;
+            min-width: 1700px;
             background: white;
         }
 
@@ -103,6 +95,7 @@
             text-align: left;
             font-size: 13px;
             vertical-align: top;
+            white-space: nowrap;
         }
 
         thead th {
@@ -137,6 +130,7 @@
             padding: 6px 0;
             border-bottom: 1px solid #e5e7eb;
             font-size: 12px;
+            color: #111827;
         }
 
         .history-item:last-child {
@@ -149,14 +143,45 @@
             text-align: center;
         }
 
+        .edit-row {
+            background: #f8fafc;
+        }
+
+        .edit-box {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr 1fr auto;
+            gap: 10px;
+            align-items: end;
+        }
+
+        .edit-box input,
+        .edit-box select {
+            width: 100%;
+            box-sizing: border-box;
+            padding: 8px 10px;
+            border: 1px solid #cfd5df;
+            border-radius: 8px;
+            font-size: 13px;
+        }
+
+        .actions-inline {
+            display: flex;
+            gap: 6px;
+            flex-wrap: wrap;
+        }
+
         @media (max-width: 1200px) {
             .filters {
+                grid-template-columns: 1fr 1fr;
+            }
+            .edit-box {
                 grid-template-columns: 1fr 1fr;
             }
         }
 
         @media (max-width: 700px) {
-            .filters {
+            .filters,
+            .edit-box {
                 grid-template-columns: 1fr;
             }
         }
@@ -222,12 +247,13 @@
                         <th>Selling Item Price</th>
                         <th>Under Whose Collector</th>
                         <th>Status</th>
+                        <th>Actions</th>
                         <th>Payment History</th>
                     </tr>
                 </thead>
                 <tbody id="customerTableBody">
                     <tr>
-                        <td colspan="11" class="empty-box">No records loaded yet.</td>
+                        <td colspan="12" class="empty-box">No records loaded yet.</td>
                     </tr>
                 </tbody>
             </table>
@@ -256,6 +282,7 @@
         let currentPage = 1;
         let lastPage = 1;
         let currentRows = [];
+        let collectorsCache = [];
 
         function formatMoney(value) {
             return Number(value || 0).toFixed(2);
@@ -263,13 +290,14 @@
 
         async function loadCollectors() {
             try {
-                const res = await fetch("/collectors");
+                const res = await fetch("/customers/collectors");
                 const data = await res.json();
 
+                collectorsCache = data;
                 collectorFilter.innerHTML = `<option value="">Show all collectors</option>`;
 
                 data.forEach(c => {
-                    if (c.is_active === 0) return;
+                    if (Number(c.is_active) === 0) return;
                     collectorFilter.innerHTML += `
                         <option value="${c.id}">
                             ${c.id} - ${c.name}
@@ -282,11 +310,23 @@
             }
         }
 
+        function collectorOptionsHtml(selectedCollectorId) {
+            let html = `<option value="">Select collector</option>`;
+
+            collectorsCache.forEach(c => {
+                if (Number(c.is_active) === 0) return;
+                const selected = String(c.id) === String(selectedCollectorId) ? "selected" : "";
+                html += `<option value="${c.id}" ${selected}>${c.id} - ${c.name}</option>`;
+            });
+
+            return html;
+        }
+
         function renderRows(rows) {
             if (!rows.length) {
                 customerTableBody.innerHTML = `
                     <tr>
-                        <td colspan="11" class="empty-box">No matching records found.</td>
+                        <td colspan="12" class="empty-box">No matching records found.</td>
                     </tr>
                 `;
                 return;
@@ -305,8 +345,47 @@
                     <td>${row.collector_name ?? ""}</td>
                     <td>${row.status_text ?? ""}</td>
                     <td>
+                        <div class="actions-inline">
+                            <button class="btn-edit" onclick="toggleEditRow(${row.customer_id})">Edit</button>
+                            <button class="btn-toggle" onclick="toggleCustomerStatus(${row.customer_id})">
+                                ${Number(row.is_active) === 0 ? "Activate" : "Inactive"}
+                            </button>
+                            <button class="btn-delete" onclick="deleteCustomer(${row.customer_id}, '${String(row.customer_name || "").replace(/'/g, "\\'")}')">
+                                Delete
+                            </button>
+                        </div>
+                    </td>
+                    <td>
                         <button class="btn-history" onclick="toggleHistory(${row.sale_id}, this)">History</button>
                         <div class="history-box" id="history-${row.sale_id}" style="display:none;">Loading...</div>
+                    </td>
+                </tr>
+
+                <tr id="edit-row-${row.customer_id}" class="edit-row" style="display:none;">
+                    <td colspan="12">
+                        <div class="edit-box">
+                            <div>
+                                <label>Name</label>
+                                <input type="text" id="edit-name-${row.customer_id}" value="${row.customer_name ?? ""}">
+                            </div>
+                            <div>
+                                <label>Address</label>
+                                <input type="text" id="edit-address-${row.customer_id}" value="${row.address ?? ""}">
+                            </div>
+                            <div>
+                                <label>Phone</label>
+                                <input type="text" id="edit-phone-${row.customer_id}" value="${row.phone ?? ""}">
+                            </div>
+                            <div>
+                                <label>Collector</label>
+                                <select id="edit-collector-${row.customer_id}">
+                                    ${collectorOptionsHtml(row.collector_id)}
+                                </select>
+                            </div>
+                            <div>
+                                <button class="btn-save" onclick="saveCustomerEdit(${row.customer_id})">Save</button>
+                            </div>
+                        </div>
                     </td>
                 </tr>
             `).join("");
@@ -324,18 +403,12 @@
             });
 
             try {
-                resultInfo.textContent = "Loading...";
-                customerTableBody.innerHTML = `
-                    <tr>
-                        <td colspan="11" class="empty-box">Loading records...</td>
-                    </tr>
-                `;
-
                 const res = await fetch(`/customers/master-list?${params.toString()}`);
                 const data = await res.json();
 
                 if (!res.ok) {
-                    throw new Error(data.message || "Failed to load customers");
+                    alert(data.message || "Failed to load customers");
+                    return;
                 }
 
                 currentRows = data.rows || [];
@@ -343,58 +416,169 @@
 
                 renderRows(currentRows);
 
-                pageInfo.textContent = `Page ${data.page} of ${data.totalPages}`;
-                resultInfo.textContent = `${data.totalRows} matching record(s) found. Showing ${currentRows.length} row(s).`;
+                resultInfo.textContent = `${data.totalRows || 0} matching record(s) found. Showing ${currentRows.length} row(s).`;
+                pageInfo.textContent = `Page ${data.page} of ${data.totalPages || 1}`;
 
-                prevBtn.disabled = data.page <= 1;
-                nextBtn.disabled = data.page >= data.totalPages;
+                prevBtn.disabled = currentPage <= 1;
+                nextBtn.disabled = currentPage >= lastPage;
             } catch (error) {
                 console.error(error);
-                resultInfo.textContent = "Could not load records.";
-                customerTableBody.innerHTML = `
-                    <tr>
-                        <td colspan="11" class="empty-box">Could not load records.</td>
-                    </tr>
-                `;
+                alert("Could not load customer master list");
             }
         }
 
-        window.toggleHistory = async function(saleId, btn) {
-            const box = document.getElementById(`history-${saleId}`);
+        function toggleEditRow(customerId) {
+            const row = document.getElementById(`edit-row-${customerId}`);
+            row.style.display = row.style.display === "none" ? "table-row" : "none";
+        }
 
-            if (box.style.display === "block") {
-                box.style.display = "none";
+        async function saveCustomerEdit(customerId) {
+            const name = document.getElementById(`edit-name-${customerId}`).value.trim();
+            const address = document.getElementById(`edit-address-${customerId}`).value.trim();
+            const phone = document.getElementById(`edit-phone-${customerId}`).value.trim();
+            const collector_id = document.getElementById(`edit-collector-${customerId}`).value;
+
+            if (!name || !address || !collector_id) {
+                alert("Please complete name, address, and collector.");
                 return;
             }
 
-            box.style.display = "block";
-            box.innerHTML = "Loading...";
+            const confirmed = confirm(
+                `Please confirm customer update:\n\n` +
+                `Customer ID: ${customerId}\n` +
+                `Name: ${name}\n` +
+                `Address: ${address}\n` +
+                `Phone: ${phone}\n` +
+                `Collector ID: ${collector_id}\n\n` +
+                `Continue saving?`
+            );
+
+            if (!confirmed) return;
 
             try {
-                const res = await fetch(`/customers/payment-history/${saleId}`);
+                const res = await fetch(`/customers/${customerId}`, {
+                    method: "PUT",
+                    headers: {
+                        "Content-Type": "application/json"
+                    },
+                    body: JSON.stringify({
+                        name,
+                        address,
+                        phone,
+                        collector_id
+                    })
+                });
+
                 const data = await res.json();
 
                 if (!res.ok) {
-                    throw new Error(data.message || "Failed to load history");
-                }
-
-                if (!data.length) {
-                    box.innerHTML = `<div class="history-item">No payment history found.</div>`;
+                    alert(data.message || "Failed to update customer");
                     return;
                 }
 
-                box.innerHTML = data.map(item => `
-                    <div class="history-item">
-                        <strong>Date:</strong> ${item.payment_date || ""}<br>
-                        <strong>Amount:</strong> ₱${formatMoney(item.amount)}<br>
-                        <strong>Type:</strong> ${item.payment_type || "regular"}
-                    </div>
-                `).join("");
+                alert("Customer updated successfully.");
+                await loadCustomers(currentPage);
             } catch (error) {
                 console.error(error);
-                box.innerHTML = `<div class="history-item">Could not load payment history.</div>`;
+                alert("Could not update customer.");
             }
-        };
+        }
+
+        async function toggleCustomerStatus(customerId) {
+            const confirmed = confirm("Are you sure you want to change this customer's active status?");
+            if (!confirmed) return;
+
+            try {
+                const res = await fetch(`/customers/${customerId}/toggle-status`, {
+                    method: "PUT"
+                });
+
+                const data = await res.json();
+
+                if (!res.ok) {
+                    alert(data.message || "Failed to change customer status");
+                    return;
+                }
+
+                alert("Customer status updated successfully.");
+                await loadCustomers(currentPage);
+            } catch (error) {
+                console.error(error);
+                alert("Could not update customer status.");
+            }
+        }
+
+        async function deleteCustomer(customerId, customerName) {
+            const confirmed = confirm(
+                `DELETE CUSTOMER AND REVERT RECORDS?\n\n` +
+                `Customer ID: ${customerId}\n` +
+                `Customer Name: ${customerName}\n\n` +
+                `This will:\n` +
+                `- delete the customer\n` +
+                `- delete related sales\n` +
+                `- delete related payments\n` +
+                `- remove related remit items\n` +
+                `- recalculate affected remits\n` +
+                `- restore sold quantity back to inventory\n\n` +
+                `Continue?`
+            );
+
+            if (!confirmed) return;
+
+            try {
+                const res = await fetch(`/customers/${customerId}`, {
+                    method: "DELETE"
+                });
+
+                const data = await res.json();
+
+                if (!res.ok) {
+                    alert(data.message || "Failed to delete customer");
+                    return;
+                }
+
+                alert(data.message || "Customer deleted successfully.");
+                await loadCustomers(currentPage);
+            } catch (error) {
+                console.error(error);
+                alert("Could not delete customer.");
+            }
+        }
+
+        async function toggleHistory(saleId, btn) {
+            const box = document.getElementById(`history-${saleId}`);
+
+            if (box.style.display === "none") {
+                box.style.display = "block";
+                box.innerHTML = "Loading...";
+
+                try {
+                    const res = await fetch(`/customers/payment-history/${saleId}`);
+                    const data = await res.json();
+
+                    if (!res.ok) {
+                        box.innerHTML = data.message || "Failed to load payment history.";
+                        return;
+                    }
+
+                    if (!data.length) {
+                        box.innerHTML = `<div class="history-item">No payment history found.</div>`;
+                        return;
+                    }
+
+                    box.innerHTML = data.map(item => `
+                        <div class="history-item">
+                            <strong>${item.payment_date}</strong> - ₱${formatMoney(item.amount)} - ${item.payment_type}
+                        </div>
+                    `).join("");
+                } catch (error) {
+                    console.error(error);
+                    box.innerHTML = "Could not load payment history.";
+                }
+            } else {
+                box.style.display = "none";
+            }
+        }
 
         searchBtn.addEventListener("click", () => loadCustomers(1));
 
@@ -403,30 +587,30 @@
             customerIdFilter.value = "";
             customerNameFilter.value = "";
             pageSize.value = "50";
-            currentPage = 1;
-            lastPage = 1;
             resultInfo.textContent = "No records loaded yet. Use the filters above, then click Search.";
+            pageInfo.textContent = "Page 1";
+            lastPage = 1;
+            currentPage = 1;
             customerTableBody.innerHTML = `
                 <tr>
-                    <td colspan="11" class="empty-box">No records loaded yet.</td>
+                    <td colspan="12" class="empty-box">No records loaded yet.</td>
                 </tr>
             `;
-            pageInfo.textContent = "Page 1";
-            prevBtn.disabled = true;
-            nextBtn.disabled = true;
         });
 
         prevBtn.addEventListener("click", () => {
-            if (currentPage > 1) loadCustomers(currentPage - 1);
+            if (currentPage > 1) {
+                loadCustomers(currentPage - 1);
+            }
         });
 
         nextBtn.addEventListener("click", () => {
-            if (currentPage < lastPage) loadCustomers(currentPage + 1);
+            if (currentPage < lastPage) {
+                loadCustomers(currentPage + 1);
+            }
         });
 
         loadCollectors();
-        prevBtn.disabled = true;
-        nextBtn.disabled = true;
     </script>
 </body>
 </html>
