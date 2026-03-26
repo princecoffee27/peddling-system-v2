@@ -25,7 +25,7 @@
 
         .search-grid {
             display: grid;
-            grid-template-columns: 1fr 1fr auto auto;
+            grid-template-columns: 1fr 1fr 1fr auto auto;
             gap: 15px;
             align-items: end;
         }
@@ -94,6 +94,14 @@
 
         .edit-btn:hover {
             background: #d97706;
+        }
+
+        .delete-btn {
+            background: #dc2626;
+        }
+
+        .delete-btn:hover {
+            background: #b91c1c;
         }
 
         .save-btn {
@@ -167,7 +175,7 @@
 
         .payment-edit-grid {
             display: grid;
-            grid-template-columns: 1fr 1fr 1fr auto;
+            grid-template-columns: 1fr 1fr 1fr auto auto;
             gap: 10px;
             align-items: end;
             margin-top: 8px;
@@ -204,6 +212,11 @@
             <div>
                 <label for="search_customer_id">Customer ID</label>
                 <input type="number" id="search_customer_id" placeholder="Enter customer ID">
+            </div>
+
+            <div>
+                <label for="search_customer_name">Customer Name</label>
+                <input type="text" id="search_customer_name" placeholder="Enter customer name">
             </div>
 
             <div>
@@ -255,6 +268,7 @@
 
     <script>
         const customerIdInput = document.getElementById("search_customer_id");
+        const customerNameInput = document.getElementById("search_customer_name");
         const collectorSelect = document.getElementById("search_collector_id");
         const searchBtn = document.getElementById("searchBtn");
         const showAllBtn = document.getElementById("showAllBtn");
@@ -301,12 +315,13 @@
 
         async function searchRecords(page = 1, showAll = currentShowAll) {
             const customer_id = customerIdInput.value.trim();
+            const customer_name = customerNameInput.value.trim();
             const collector_id = collectorSelect.value;
 
             currentPage = page;
             currentShowAll = showAll;
 
-            const hasFilter = !!customer_id || !!collector_id;
+            const hasFilter = !!customer_id || !!customer_name || !!collector_id;
 
             if (!hasFilter && !showAll) {
                 renderResults([]);
@@ -322,6 +337,10 @@
 
             if (customer_id) {
                 params.append("customer_id", customer_id);
+            }
+
+            if (customer_name) {
+                params.append("customer_name", customer_name);
             }
 
             if (collector_id) {
@@ -626,7 +645,11 @@
                                         </div>
 
                                         <div>
-                                            <button class="save-btn" type="button" onclick="saveHistoryPayment(${payment.payment_id})">Save Payment Edit</button>
+                                            <button class="save-btn" type="button" onclick="saveHistoryPayment(${payment.payment_id})">Save Edit</button>
+                                        </div>
+
+                                        <div>
+                                            <button class="delete-btn" type="button" onclick="deleteHistoryPayment(${payment.payment_id})">Delete Payment</button>
                                         </div>
                                     </div>
                                 </td>
@@ -688,6 +711,35 @@
             }
         }
 
+        async function deleteHistoryPayment(paymentId) {
+            const confirmed = confirm(
+                "Delete this payment?\n\nThis will remove the payment and add its amount back to the customer's balance."
+            );
+
+            if (!confirmed) {
+                return;
+            }
+
+            try {
+                const res = await fetch(`/payments/history/${paymentId}`, {
+                    method: "DELETE"
+                });
+
+                const data = await res.json();
+
+                if (!res.ok) {
+                    alert(data.message || "Failed to delete payment");
+                    return;
+                }
+
+                alert(data.message || "Payment deleted successfully");
+                await searchRecords(currentPage, currentShowAll);
+            } catch (error) {
+                console.log(error);
+                alert("Could not delete payment");
+            }
+        }
+
         searchBtn.addEventListener("click", () => {
             currentShowAll = false;
             searchRecords(1, false);
@@ -695,6 +747,7 @@
 
         showAllBtn.addEventListener("click", async () => {
             customerIdInput.value = "";
+            customerNameInput.value = "";
             collectorSelect.value = "";
             await searchRecords(1, true);
         });

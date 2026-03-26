@@ -54,7 +54,6 @@
 
         textarea {
             min-height: 90px;
-            resize: vertical;
         }
 
         button {
@@ -99,6 +98,14 @@
             background: #b91c1c;
         }
 
+        .warning-btn {
+            background: #f59e0b;
+        }
+
+        .warning-btn:hover {
+            background: #d97706;
+        }
+
         .table-wrap {
             max-height: 420px;
             overflow: auto;
@@ -109,7 +116,7 @@
         table {
             width: 100%;
             border-collapse: collapse;
-            min-width: 950px;
+            min-width: 1100px;
         }
 
         th, td {
@@ -167,6 +174,12 @@
         .muted {
             color: #666;
             font-size: 13px;
+        }
+
+        .action-inline {
+            display: flex;
+            gap: 6px;
+            flex-wrap: wrap;
         }
 
         @media (max-width: 1100px) {
@@ -383,6 +396,7 @@
                         <th>Cash On Hand</th>
                         <th>Net Total</th>
                         <th>Positive/Negative</th>
+                        <th>Action</th>
                     </tr>
                 </thead>
                 <tbody id="remitsHistoryBody"></tbody>
@@ -417,6 +431,7 @@
         const miscInput = document.getElementById("miscellaneous");
         const cashOnHandInput = document.getElementById("cash_on_hand");
         const remitDateInput = document.getElementById("remit_date");
+        const notesInput = document.getElementById("notes");
 
         const searchPageSizeSelect = document.getElementById("searchPageSizeSelect");
         const searchPrevBtn = document.getElementById("searchPrevBtn");
@@ -446,6 +461,10 @@
         function setTodayDate() {
             const today = new Date().toISOString().split("T")[0];
             remitDateInput.value = today;
+        }
+
+        function money(value) {
+            return Number(value || 0).toFixed(2);
         }
 
         async function loadCollectors() {
@@ -541,7 +560,7 @@
                         <td>${item.customer_id}</td>
                         <td>${item.customer_name}</td>
                         <td>${item.collector_name || ""}</td>
-                        <td>${item.amount}</td>
+                        <td>${money(item.amount)}</td>
                         <td>${item.payment_date}</td>
                         <td>
                             <button class="add-btn" type="button" onclick="addToSelected(${item.payment_id})" ${alreadySelected ? "disabled" : ""}>
@@ -582,7 +601,7 @@
                             <td>${item.customer_id}</td>
                             <td>${item.customer_name}</td>
                             <td>${item.collector_name || ""}</td>
-                            <td>${item.amount}</td>
+                            <td>${money(item.amount)}</td>
                             <td>${item.payment_date}</td>
                             <td>
                                 <button class="remove-btn" type="button" onclick="removeSelected(${item.payment_id})">Remove</button>
@@ -646,18 +665,19 @@
             const cashOnHand = Number(cashOnHandInput.value) || 0;
             const commissionPercent = Number(commissionPercentAuto.value) || 0;
 
+            // NEW FORMULA
             const totalExpenses = gas + food + misc;
-            const commissionAmount = (totalSelectedPayments - totalExpenses) * (commissionPercent / 100);
-            const grossTotal = totalSelectedPayments - commissionAmount;
+            const grossTotal = totalSelectedPayments - totalExpenses;
+            const commissionAmount = grossTotal * (commissionPercent / 100);
             const netTotal = cashOnHand - commissionAmount;
-            const varianceAmount = grossTotal - netTotal;
+            const varianceAmount = cashOnHand - grossTotal;
 
-            totalSelectedPaymentsText.textContent = totalSelectedPayments.toFixed(2);
-            totalExpensesText.textContent = totalExpenses.toFixed(2);
-            commissionAmountText.textContent = commissionAmount.toFixed(2);
-            grossTotalText.textContent = grossTotal.toFixed(2);
-            netTotalText.textContent = netTotal.toFixed(2);
-            varianceAmountText.textContent = varianceAmount.toFixed(2);
+            totalSelectedPaymentsText.textContent = money(totalSelectedPayments);
+            totalExpensesText.textContent = money(totalExpenses);
+            commissionAmountText.textContent = money(commissionAmount);
+            grossTotalText.textContent = money(grossTotal);
+            netTotalText.textContent = money(netTotal);
+            varianceAmountText.textContent = money(varianceAmount);
         }
 
         async function saveRemit() {
@@ -684,8 +704,25 @@
                 miscellaneous: miscInput.value,
                 commission_percent: commissionPercentAuto.value,
                 cash_on_hand: cashOnHandInput.value,
-                notes: document.getElementById("notes").value
+                notes: notesInput.value
             };
+
+            const confirmed = confirm(
+                `Please confirm this remit:\n\n` +
+                `Collector ID: ${collectorIdAuto.value}\n` +
+                `Remit Date: ${remitDateInput.value}\n` +
+                `Selected Payments: ${selectedItems.length}\n` +
+                `Total Selected Payments: ₱${totalSelectedPaymentsText.textContent}\n` +
+                `Total Expenses: ₱${totalExpensesText.textContent}\n` +
+                `Gross Total: ₱${grossTotalText.textContent}\n` +
+                `Commission Amount: ₱${commissionAmountText.textContent}\n` +
+                `Cash On Hand: ₱${money(cashOnHandInput.value)}\n` +
+                `Net Total: ₱${netTotalText.textContent}\n` +
+                `Positive/Negative: ₱${varianceAmountText.textContent}\n\n` +
+                `Continue saving?`
+            );
+
+            if (!confirmed) return;
 
             const res = await fetch("/remits", {
                 method: "POST",
@@ -711,7 +748,8 @@
             foodInput.value = 0;
             miscInput.value = 0;
             cashOnHandInput.value = 0;
-            document.getElementById("notes").value = "";
+            notesInput.value = "";
+            setTodayDate();
 
             await searchPayments(1, searchCurrentLimit);
             await loadRemitsHistory(1, historyCurrentLimit);
@@ -734,7 +772,7 @@
 
             if (rows.length === 0) {
                 remitsHistoryBody.innerHTML = `
-                    <tr><td colspan="13">No saved remits found.</td></tr>
+                    <tr><td colspan="14">No saved remits found.</td></tr>
                 `;
             } else {
                 rows.forEach(remit => {
@@ -743,16 +781,22 @@
                             <td>${remit.id}</td>
                             <td>${remit.collector_name}</td>
                             <td>${remit.remit_date}</td>
-                            <td>${remit.total_selected_payments}</td>
-                            <td>${remit.gas}</td>
-                            <td>${remit.food}</td>
-                            <td>${remit.miscellaneous}</td>
-                            <td>${remit.commission_percent}</td>
-                            <td>${remit.commission_amount}</td>
-                            <td>${remit.gross_total}</td>
-                            <td>${remit.cash_on_hand}</td>
-                            <td>${remit.net_total}</td>
-                            <td>${remit.variance_amount}</td>
+                            <td>${money(remit.total_selected_payments)}</td>
+                            <td>${money(remit.gas)}</td>
+                            <td>${money(remit.food)}</td>
+                            <td>${money(remit.miscellaneous)}</td>
+                            <td>${money(remit.commission_percent)}</td>
+                            <td>${money(remit.commission_amount)}</td>
+                            <td>${money(remit.gross_total)}</td>
+                            <td>${money(remit.cash_on_hand)}</td>
+                            <td>${money(remit.net_total)}</td>
+                            <td>${money(remit.variance_amount)}</td>
+                            <td>
+                                <div class="action-inline">
+                                    <button class="warning-btn" type="button" onclick="reopenRemit(${remit.id})">Edit</button>
+                                    <button class="remove-btn" type="button" onclick="deleteRemit(${remit.id})">Delete</button>
+                                </div>
+                            </td>
                         </tr>
                     `;
                 });
@@ -776,6 +820,91 @@
 
             historyPrevBtn.disabled = historyCurrentPage <= 1;
             historyNextBtn.disabled = historyTotalPages === 0 || historyCurrentPage >= historyTotalPages;
+        }
+
+        async function reopenRemit(remitId) {
+            const confirmed = confirm(
+                `Reopen this remit for editing?\n\n` +
+                `This will remove the saved remit record first,\n` +
+                `then put all its selected payments back to the Selected Payments area.\n\n` +
+                `Continue?`
+            );
+
+            if (!confirmed) return;
+
+            const res = await fetch(`/remits/${remitId}/reopen-edit`, {
+                method: "POST"
+            });
+
+            const data = await res.json();
+
+            if (!res.ok) {
+                alert(data.message || "Failed to reopen remit");
+                return;
+            }
+
+            const remit = data.remit;
+            const items = data.items || [];
+
+            document.getElementById("customer_id_from").value = remit.customer_id_from || "";
+            document.getElementById("customer_id_to").value = remit.customer_id_to || "";
+            document.getElementById("payment_date_from").value = remit.payment_date_from || "";
+            document.getElementById("payment_date_to").value = remit.payment_date_to || "";
+            collectorSearchSelect.value = remit.collector_id || "";
+
+            remitDateInput.value = remit.remit_date || "";
+            gasInput.value = remit.gas || 0;
+            foodInput.value = remit.food || 0;
+            miscInput.value = remit.miscellaneous || 0;
+            cashOnHandInput.value = remit.cash_on_hand || 0;
+            notesInput.value = remit.notes || "";
+
+            selectedItems = items;
+            hasSearched = false;
+
+            syncCollectorAutoFields();
+            renderSelectedItems();
+            renderSearchResults();
+            updateSearchPagination({
+                page: 0,
+                totalPages: 0,
+                total: 0,
+                limit: searchCurrentLimit
+            });
+
+            await loadRemitsHistory(1, historyCurrentLimit);
+
+            alert("Remit reopened. Review the selected payments and save again.");
+        }
+
+        async function deleteRemit(remitId) {
+            const confirmed = confirm(
+                `Delete this remit?\n\n` +
+                `This will remove the saved remit record and its remit items.\n` +
+                `The payments will become available again for future remit selection.\n\n` +
+                `Continue?`
+            );
+
+            if (!confirmed) return;
+
+            const res = await fetch(`/remits/${remitId}`, {
+                method: "DELETE"
+            });
+
+            const data = await res.json();
+
+            if (!res.ok) {
+                alert(data.message || "Failed to delete remit");
+                return;
+            }
+
+            alert(data.message || "Remit deleted successfully");
+
+            if (hasSearched) {
+                await searchPayments(1, searchCurrentLimit);
+            }
+
+            await loadRemitsHistory(1, historyCurrentLimit);
         }
 
         document.getElementById("searchBtn").addEventListener("click", () => {

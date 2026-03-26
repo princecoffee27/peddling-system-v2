@@ -27,6 +27,7 @@ router.get("/collectors", (req, res) => {
 router.get("/search", (req, res) => {
     const {
         customer_id,
+        customer_name,
         collector_id,
         page = 1,
         limit = 20,
@@ -37,7 +38,7 @@ router.get("/search", (req, res) => {
     const pageLimit = parseInt(limit, 10) || 20;
     const offset = (currentPage - 1) * pageLimit;
 
-    const hasFilter = !!customer_id || !!collector_id;
+    const hasFilter = !!customer_id || !!customer_name || !!collector_id;
     const allowShowAll = show_all === "true";
 
     if (!hasFilter && !allowShowAll) {
@@ -64,6 +65,11 @@ router.get("/search", (req, res) => {
     if (customer_id) {
         fromSql += " AND customers.id = ? ";
         params.push(customer_id);
+    }
+
+    if (customer_name) {
+        fromSql += " AND customers.name LIKE ? ";
+        params.push(`%${customer_name}%`);
     }
 
     if (collector_id) {
@@ -415,6 +421,109 @@ router.put("/history/:payment_id", (req, res) => {
                         });
                     }
                 );
+            });
+        });
+    });
+});
+
+// Delete payment from history and restore sale balance safely
+router.delete("/history/:payment_id", (req, res) => {
+    const paymentId = req.params.payment_id;
+
+    const getPaymentSql = `
+        SELECT id, sale_id, amount
+        FROM payments
+        WHERE id = ?
+    `;
+
+    db.query(getPaymentSql, [paymentId], (err, paymentResult) => {
+        if (err) {
+            console.log("GET PAYMENT FOR DELETE ERROR:", err);
+            return res.status(500).json({
+                message: err.sqlMessage || err.message
+            });
+        }
+
+        if (paymentResult.length === 0) {
+            return res.status(404).json({
+                message: "Payment not found"
+            });
+        }
+
+        const payment = paymentResult[0];
+        const saleId = payment.sale_id;
+        const paymentAmount = Number(payment.amount);
+
+        db.beginTransaction((txErr) => {
+            if (txErr) {
+                console.log("DELETE PAYMENT TRANSACTION ERROR:", txErr);
+                return res.status(500).json({
+                    message: txErr.sqlMessage || txErr.message
+                });
+            }
+
+            const deleteRemitItemsSql = `
+                DELETE FROM remit_items
+                WHERE payment_id = ?
+            `;
+
+            db.query(deleteRemitItemsSql, [paymentId], (deleteRemitItemsErr) => {
+                if (deleteRemitItemsErr) {
+                    return db.rollback(() => {
+                        console.log("DELETE REMIT ITEMS FOR PAYMENT DELETE ERROR:", deleteRemitItemsErr);
+                        res.status(500).json({
+                            message: deleteRemitItemsErr.sqlMessage || deleteRemitItemsErr.message
+                        });
+                    });
+                }
+
+                const deletePaymentSql = `
+                    DELETE FROM payments
+                    WHERE id = ?
+                `;
+
+                db.query(deletePaymentSql, [paymentId], (deletePaymentErr) => {
+                    if (deletePaymentErr) {
+                        return db.rollback(() => {
+                            console.log("DELETE PAYMENT ERROR:", deletePaymentErr);
+                            res.status(500).json({
+                                message: deletePaymentErr.sqlMessage || deletePaymentErr.message
+                            });
+                        });
+                    }
+
+                    const restoreBalanceSql = `
+                        UPDATE sales
+                        SET balance = balance + ?
+                        WHERE id = ?
+                    `;
+
+                    db.query(restoreBalanceSql, [paymentAmount, saleId], (restoreErr) => {
+                        if (restoreErr) {
+                            return db.rollback(() => {
+                                console.log("RESTORE SALE BALANCE ERROR:", restoreErr);
+                                res.status(500).json({
+                                    message: restoreErr.sqlMessage || restoreErr.message
+                                });
+                            });
+                        }
+
+                        db.commit((commitErr) => {
+                            if (commitErr) {
+                                return db.rollback(() => {
+                                    console.log("DELETE PAYMENT COMMIT ERROR:", commitErr);
+                                    res.status(500).json({
+                                        message: commitErr.sqlMessage || commitErr.message
+                                    });
+                                });
+                            }
+
+                            res.json({
+                                message: "Payment deleted successfully and sale balance restored"
+                            });
+                        });
+                    });
+                });
             });
         });
     });

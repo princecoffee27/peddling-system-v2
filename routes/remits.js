@@ -162,11 +162,11 @@ router.post("/", (req, res) => {
         return sum + (Number(item.amount) || 0);
     }, 0);
 
-    const totalExpenses = gasValue + foodValue + miscValue;
-    const commissionAmount = (totalSelectedPayments - totalExpenses) * (commissionPercentValue / 100);
-    const grossTotal = totalSelectedPayments - commissionAmount;
+    // NEW FORMULA
+    const grossTotal = totalSelectedPayments - (gasValue + foodValue + miscValue);
+    const commissionAmount = grossTotal * (commissionPercentValue / 100);
     const netTotal = cashOnHandValue - commissionAmount;
-    const varianceAmount = grossTotal - netTotal;
+    const varianceAmount = cashOnHandValue - grossTotal;
 
     db.beginTransaction((err) => {
         if (err) {
@@ -308,6 +308,10 @@ router.get("/", (req, res) => {
             remits.collector_id,
             collectors.name AS collector_name,
             DATE_FORMAT(remits.remit_date, '%Y-%m-%d') AS remit_date,
+            DATE_FORMAT(remits.payment_date_from, '%Y-%m-%d') AS payment_date_from,
+            DATE_FORMAT(remits.payment_date_to, '%Y-%m-%d') AS payment_date_to,
+            remits.customer_id_from,
+            remits.customer_id_to,
             remits.total_selected_payments,
             remits.gas,
             remits.food,
@@ -352,6 +356,204 @@ router.get("/", (req, res) => {
                     total,
                     totalPages
                 }
+            });
+        });
+    });
+});
+
+// Safe delete remit
+router.delete("/:remitId", (req, res) => {
+    const remitId = req.params.remitId;
+
+    db.beginTransaction((txErr) => {
+        if (txErr) {
+            console.log("DELETE REMIT TRANSACTION ERROR:", txErr);
+            return res.status(500).json({
+                message: txErr.sqlMessage || txErr.message
+            });
+        }
+
+        const deleteItemsSql = `
+            DELETE FROM remit_items
+            WHERE remit_id = ?
+        `;
+
+        db.query(deleteItemsSql, [remitId], (deleteItemsErr) => {
+            if (deleteItemsErr) {
+                return db.rollback(() => {
+                    console.log("DELETE REMIT ITEMS ERROR:", deleteItemsErr);
+                    res.status(500).json({
+                        message: deleteItemsErr.sqlMessage || deleteItemsErr.message
+                    });
+                });
+            }
+
+            const deleteRemitSql = `
+                DELETE FROM remits
+                WHERE id = ?
+            `;
+
+            db.query(deleteRemitSql, [remitId], (deleteRemitErr, deleteRemitResult) => {
+                if (deleteRemitErr) {
+                    return db.rollback(() => {
+                        console.log("DELETE REMIT ERROR:", deleteRemitErr);
+                        res.status(500).json({
+                            message: deleteRemitErr.sqlMessage || deleteRemitErr.message
+                        });
+                    });
+                }
+
+                if (deleteRemitResult.affectedRows === 0) {
+                    return db.rollback(() => {
+                        res.status(404).json({
+                            message: "Remit not found"
+                        });
+                    });
+                }
+
+                db.commit((commitErr) => {
+                    if (commitErr) {
+                        return db.rollback(() => {
+                            console.log("DELETE REMIT COMMIT ERROR:", commitErr);
+                            res.status(500).json({
+                                message: commitErr.sqlMessage || commitErr.message
+                            });
+                        });
+                    }
+
+                    res.json({
+                        message: "Remit deleted successfully. Payments are available again for remit."
+                    });
+                });
+            });
+        });
+    });
+});
+
+// Reopen remit for editing
+router.post("/:remitId/reopen-edit", (req, res) => {
+    const remitId = req.params.remitId;
+
+    db.beginTransaction((txErr) => {
+        if (txErr) {
+            console.log("REOPEN REMIT TRANSACTION ERROR:", txErr);
+            return res.status(500).json({
+                message: txErr.sqlMessage || txErr.message
+            });
+        }
+
+        const getRemitSql = `
+            SELECT
+                id,
+                collector_id,
+                DATE_FORMAT(remit_date, '%Y-%m-%d') AS remit_date,
+                DATE_FORMAT(payment_date_from, '%Y-%m-%d') AS payment_date_from,
+                DATE_FORMAT(payment_date_to, '%Y-%m-%d') AS payment_date_to,
+                customer_id_from,
+                customer_id_to,
+                gas,
+                food,
+                miscellaneous,
+                commission_percent,
+                cash_on_hand,
+                notes
+            FROM remits
+            WHERE id = ?
+        `;
+
+        db.query(getRemitSql, [remitId], (getRemitErr, remitRows) => {
+            if (getRemitErr) {
+                return db.rollback(() => {
+                    console.log("GET REMIT FOR REOPEN ERROR:", getRemitErr);
+                    res.status(500).json({
+                        message: getRemitErr.sqlMessage || getRemitErr.message
+                    });
+                });
+            }
+
+            if (remitRows.length === 0) {
+                return db.rollback(() => {
+                    res.status(404).json({
+                        message: "Remit not found"
+                    });
+                });
+            }
+
+            const remit = remitRows[0];
+
+            const getItemsSql = `
+                SELECT
+                    ri.payment_id,
+                    ri.customer_id,
+                    ri.customer_name,
+                    ri.collector_id,
+                    c.name AS collector_name,
+                    ri.payment_amount AS amount,
+                    DATE_FORMAT(ri.payment_date, '%Y-%m-%d') AS payment_date
+                FROM remit_items ri
+                LEFT JOIN collectors c ON ri.collector_id = c.id
+                WHERE ri.remit_id = ?
+                ORDER BY ri.id ASC
+            `;
+
+            db.query(getItemsSql, [remitId], (getItemsErr, itemRows) => {
+                if (getItemsErr) {
+                    return db.rollback(() => {
+                        console.log("GET REMIT ITEMS FOR REOPEN ERROR:", getItemsErr);
+                        res.status(500).json({
+                            message: getItemsErr.sqlMessage || getItemsErr.message
+                        });
+                    });
+                }
+
+                const deleteItemsSql = `
+                    DELETE FROM remit_items
+                    WHERE remit_id = ?
+                `;
+
+                db.query(deleteItemsSql, [remitId], (deleteItemsErr) => {
+                    if (deleteItemsErr) {
+                        return db.rollback(() => {
+                            console.log("DELETE REMIT ITEMS FOR REOPEN ERROR:", deleteItemsErr);
+                            res.status(500).json({
+                                message: deleteItemsErr.sqlMessage || deleteItemsErr.message
+                            });
+                        });
+                    }
+
+                    const deleteRemitSql = `
+                        DELETE FROM remits
+                        WHERE id = ?
+                    `;
+
+                    db.query(deleteRemitSql, [remitId], (deleteRemitErr) => {
+                        if (deleteRemitErr) {
+                            return db.rollback(() => {
+                                console.log("DELETE REMIT FOR REOPEN ERROR:", deleteRemitErr);
+                                res.status(500).json({
+                                    message: deleteRemitErr.sqlMessage || deleteRemitErr.message
+                                });
+                            });
+                        }
+
+                        db.commit((commitErr) => {
+                            if (commitErr) {
+                                return db.rollback(() => {
+                                    console.log("REOPEN REMIT COMMIT ERROR:", commitErr);
+                                    res.status(500).json({
+                                        message: commitErr.sqlMessage || commitErr.message
+                                    });
+                                });
+                            }
+
+                            res.json({
+                                message: "Remit reopened for editing",
+                                remit,
+                                items: itemRows
+                            });
+                        });
+                    });
+                });
             });
         });
     });
