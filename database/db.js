@@ -1,19 +1,19 @@
 const mysql = require("mysql2");
 
-const db = mysql.createConnection({
-    host: process.env.MYSQLHOST || "localhost",
-    user: process.env.MYSQLUSER || "root",
-    password: process.env.MYSQLPASSWORD || "",
-    database: process.env.MYSQLDATABASE || "peddling_db",
-    port: process.env.MYSQLPORT ? Number(process.env.MYSQLPORT) : 3306
+const db = mysql.createPool({
+    uri: process.env.MYSQL_URL,
+    waitForConnections: true,
+    connectionLimit: 10,
+    queueLimit: 0
 });
 
-db.connect((err) => {
+db.getConnection((err, connection) => {
     if (err) {
-        console.error("MySQL connection error:", err.message);
-        return;
+        console.error("DB CONNECTION ERROR:", err);
+    } else {
+        console.log("Connected to MySQL pool");
+        connection.release();
     }
-    console.log("MySQL Connected");
 });
 
 module.exports = db;
