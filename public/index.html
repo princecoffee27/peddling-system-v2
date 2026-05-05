@@ -4,34 +4,196 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Peddling System</title>
-    <p><a href="#" id="logoutLink">Logout</a></p>
+    <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
-    <h1>Peddling Management System</h1>
 
-    <ul>
-        <!--   <li><a href="customer-collection.html">Customer + Collection</a></li> -->
-        <!-- <li><a href="customers.html">Customers</a></li> -->
-        <li><a href="collectors.html">Collectors</a></li>
-        <li><a href="collector-customers.html">Customers by Collector</a></li>
-        <li><a href="inventory.html">Inventory</a></li>
-        <li><a href="collection.html">Sales / Collection</a></li>
-        <!-- <li><a href="payments.html">Payments</a></li> -->
-        <li><a href="new-customer-sale.html">New Customer + Downpayment</a></li>
-        <li><a href="expenses.html">Expenses</a></li>
-        <li><a href="remit.html">Remit Page</a></li>
-        <li><a href="report.html">Collector Business Report</a></li>
-    </ul>
-    <script>
-    document.getElementById("logoutLink").addEventListener("click", async function(e) {
-        e.preventDefault();
+<div class="container">
+    <div class="sidebar">
+        <h2>Peddling System</h2>
 
-        await fetch("/auth/logout", {
-            method: "POST"
-        });
+        <a href="index.html">Dashboard</a>
+        <a href="collectors.html">Collectors</a>
+        <a href="collector-customers.html">Customers by Collector</a>
+        <a href="inventory.html">Inventory</a>
+        <a href="collection.html">Sales / Collection</a>
+        <a href="new-customer-sale.html">New Customer + Downpayment</a>
+        <a href="expenses.html">Expenses</a>
+        <a href="remit.html">Remits</a>
+        <a href="collector-payables.html">Collector Payables</a>
+        <a href="report.html">Reports</a>
+        <a href="users.html">User Management</a>
 
-        window.location.href = "/login.html";
+        <hr style="border-color:#374151; margin:20px 0;">
+
+        <a href="#" id="logoutLink">Logout</a>
+    </div>
+
+    <div class="main">
+        <h1>Dashboard</h1>
+
+       <div class="cards" id="moneySection">
+            <div class="card">
+                <h3>Total Customers</h3>
+                <p id="totalCustomers">0</p>
+            </div>
+
+            <div class="card">
+                <h3>Total Sales</h3>
+                <p id="totalSales">0</p>
+            </div>
+
+            <div class="card">
+                <h3>Total Collected</h3>
+                <p id="totalCollected">₱0</p>
+            </div>
+
+            <div class="card">
+                <h3>Remaining Balance</h3>
+                <p id="remainingBalance">₱0</p>
+            </div>
+
+            <div class="card">
+                <h3>Total Sold Capital</h3>
+                <p id="totalSoldCapital">₱0</p>
+            </div>
+
+            <div class="card">
+                <h3>Total Expenses</h3>
+                <p id="totalExpenses">₱0</p>
+            </div>
+        </div>
+
+        <div class="table-card">
+            <h3>Recent Activity</h3>
+            <table class="table-modern">
+                <thead>
+                    <tr>
+                        <th>Customer</th>
+                        <th>Amount</th>
+                        <th>Date</th>
+                        <th>Type</th>
+                    </tr>
+                </thead>
+                <tbody id="activityTable">
+                    <tr>
+                        <td colspan="4">Loading...</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<script>
+function formatPeso(value) {
+    return "₱" + Number(value || 0).toLocaleString("en-PH", {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
     });
+}
+
+async function loadDashboardSummary() {
+    try {
+        const response = await fetch("/dashboard/summary");
+        const data = await response.json();
+
+        if (!response.ok) {
+            throw new Error(data.message || "Failed to load dashboard summary");
+        }
+
+        document.getElementById("totalCustomers").textContent = data.totalCustomers || 0;
+        document.getElementById("totalSales").textContent = data.totalSales || 0;
+        document.getElementById("totalCollected").textContent = formatPeso(data.totalCollected);
+        document.getElementById("remainingBalance").textContent = formatPeso(data.remainingBalance);
+        document.getElementById("totalSoldCapital").textContent = formatPeso(data.totalSoldCapital);
+        document.getElementById("totalExpenses").textContent = formatPeso(data.totalExpenses);
+    } catch (error) {
+        console.error("Dashboard summary error:", error);
+    }
+}
+
+async function loadRecentActivity() {
+    try {
+        const response = await fetch("/dashboard/recent-activity");
+        const data = await response.json();
+
+        if (!response.ok) {
+            throw new Error(data.message || "Failed to load recent activity");
+        }
+
+        const tbody = document.getElementById("activityTable");
+
+        if (!data.length) {
+            tbody.innerHTML = `<tr><td colspan="4">No recent activity found.</td></tr>`;
+            return;
+        }
+
+        tbody.innerHTML = data.map(row => `
+            <tr>
+                <td>${row.customer_name || ""}</td>
+                <td>${formatPeso(row.amount)}</td>
+                <td>${row.payment_date || ""}</td>
+                <td>${row.payment_type || ""}</td>
+            </tr>
+        `).join("");
+    } catch (error) {
+        console.error("Recent activity error:", error);
+        document.getElementById("activityTable").innerHTML =
+            `<tr><td colspan="4">Failed to load recent activity.</td></tr>`;
+    }
+}
+
+async function applyPrivileges() {
+    try {
+        const res = await fetch("/auth/me");
+        const data = await res.json();
+
+        if (!res.ok || !data.user) {
+            window.location.href = "login.html";
+            return;
+        }
+
+        const user = data.user;
+
+        if (user.role === "admin") return;
+
+        if (!user.privileges?.view_dashboard_money) {
+            const el = document.getElementById("moneySection");
+            if (el) el.style.display = "none";
+        }
+
+        if (!user.privileges?.view_reports) {
+            document.querySelectorAll("a[href='report.html']").forEach(el => {
+                el.style.display = "none";
+            });
+        }
+
+        if (!user.privileges?.manage_users) {
+            document.querySelectorAll("a[href='users.html']").forEach(el => {
+                el.style.display = "none";
+            });
+        }
+
+    } catch (err) {
+        console.error("Privilege error:", err);
+    }
+}
+
+document.getElementById("logoutLink").addEventListener("click", async function(e) {
+    e.preventDefault();
+
+    await fetch("/auth/logout", {
+        method: "POST"
+    });
+
+    window.location.href = "/login.html";
+});
+
+loadDashboardSummary();
+loadRecentActivity();
+applyPrivileges();
 </script>
+
 </body>
 </html>

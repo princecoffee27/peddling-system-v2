@@ -116,7 +116,7 @@
         table {
             width: 100%;
             border-collapse: collapse;
-            min-width: 1100px;
+            min-width: 1400px;
         }
 
         th, td {
@@ -339,8 +339,23 @@
                 </div>
 
                 <div>
+                    <label>Negative Deduction</label>
+                    <input type="number" id="negative_deduction" step="0.01" min="0" value="0">
+                </div>
+
+                <div>
+                    <label>Cash Advance Deduction</label>
+                    <input type="number" id="cash_advance_deduction" step="0.01" min="0" value="0">
+                </div>
+
+                <div>
                     <label>Cash On Hand Given To Me</label>
                     <input type="number" id="cash_on_hand" step="0.01" min="0" value="0">
+                </div>
+
+                <div>
+                    <label>Final Commission Paid</label>
+                    <input type="text" id="final_commission_paid_auto" readonly>
                 </div>
 
                 <div class="full-width">
@@ -352,6 +367,9 @@
             <div class="summary-box">
                 <p>Total Expenses: ₱<span id="totalExpenses">0.00</span></p>
                 <p>Commission Amount: ₱<span id="commissionAmount">0.00</span></p>
+                <p>Negative Deduction: ₱<span id="negativeDeductionText">0.00</span></p>
+                <p>Cash Advance Deduction: ₱<span id="cashAdvanceDeductionText">0.00</span></p>
+                <p>Final Commission Paid: ₱<span id="finalCommissionPaidText">0.00</span></p>
                 <p>Gross Total: ₱<span id="grossTotal">0.00</span></p>
                 <p>Net Total: ₱<span id="netTotal">0.00</span></p>
                 <p>Positive / Negative Money: ₱<span id="varianceAmount">0.00</span></p>
@@ -392,6 +410,9 @@
                         <th>Miscellaneous</th>
                         <th>Commission %</th>
                         <th>Commission Amount</th>
+                        <th>Negative Deduction</th>
+                        <th>Cash Advance Deduction</th>
+                        <th>Final Commission Paid</th>
                         <th>Gross Total</th>
                         <th>Cash On Hand</th>
                         <th>Net Total</th>
@@ -419,16 +440,22 @@
         const totalSelectedPaymentsText = document.getElementById("totalSelectedPayments");
         const totalExpensesText = document.getElementById("totalExpenses");
         const commissionAmountText = document.getElementById("commissionAmount");
+        const negativeDeductionText = document.getElementById("negativeDeductionText");
+        const cashAdvanceDeductionText = document.getElementById("cashAdvanceDeductionText");
+        const finalCommissionPaidText = document.getElementById("finalCommissionPaidText");
         const grossTotalText = document.getElementById("grossTotal");
         const netTotalText = document.getElementById("netTotal");
         const varianceAmountText = document.getElementById("varianceAmount");
 
         const collectorIdAuto = document.getElementById("collector_id_auto");
         const commissionPercentAuto = document.getElementById("commission_percent_auto");
+        const finalCommissionPaidAuto = document.getElementById("final_commission_paid_auto");
 
         const gasInput = document.getElementById("gas");
         const foodInput = document.getElementById("food");
         const miscInput = document.getElementById("miscellaneous");
+        const negativeDeductionInput = document.getElementById("negative_deduction");
+        const cashAdvanceDeductionInput = document.getElementById("cash_advance_deduction");
         const cashOnHandInput = document.getElementById("cash_on_hand");
         const remitDateInput = document.getElementById("remit_date");
         const notesInput = document.getElementById("notes");
@@ -467,6 +494,10 @@
             return Number(value || 0).toFixed(2);
         }
 
+        function round2(value) {
+            return Number((Number(value) || 0).toFixed(2));
+        }
+
         async function loadCollectors() {
             const res = await fetch("/remits/collectors");
             const data = await res.json();
@@ -502,18 +533,14 @@
             const params = new URLSearchParams();
             const filters = getSearchFilters();
 
-            searchCurrentPage = page;
-            searchCurrentLimit = Number(limit);
-            hasSearched = true;
-
             if (filters.customerIdFrom) params.append("customer_id_from", filters.customerIdFrom);
             if (filters.customerIdTo) params.append("customer_id_to", filters.customerIdTo);
             if (filters.paymentDateFrom) params.append("payment_date_from", filters.paymentDateFrom);
             if (filters.paymentDateTo) params.append("payment_date_to", filters.paymentDateTo);
             if (filters.collectorId) params.append("collector_id", filters.collectorId);
 
-            params.append("page", searchCurrentPage);
-            params.append("limit", searchCurrentLimit);
+            params.append("page", page);
+            params.append("limit", limit);
 
             const res = await fetch(`/remits/search?${params.toString()}`);
             const data = await res.json();
@@ -523,15 +550,15 @@
                 return;
             }
 
+            hasSearched = true;
             searchResults = data.rows || [];
             renderSearchResults();
             updateSearchPagination(data.pagination || {
-                page: 0,
+                page: 1,
                 totalPages: 0,
                 total: 0,
-                limit: searchCurrentLimit
+                limit
             });
-            syncCollectorAutoFields();
         }
 
         function renderSearchResults() {
@@ -539,14 +566,14 @@
 
             if (!hasSearched) {
                 searchResultsBody.innerHTML = `
-                    <tr><td colspan="7">Press Search to load payment results.</td></tr>
+                    <tr><td colspan="7">Use the search filters above, then click Search.</td></tr>
                 `;
                 return;
             }
 
             if (searchResults.length === 0) {
                 searchResultsBody.innerHTML = `
-                    <tr><td colspan="7">No matching payments found.</td></tr>
+                    <tr><td colspan="7">No payments found for this search.</td></tr>
                 `;
                 return;
             }
@@ -619,8 +646,18 @@
             const item = searchResults.find(x => Number(x.payment_id) === Number(paymentId));
             if (!item) return;
 
-            const exists = selectedItems.some(x => Number(x.payment_id) === Number(paymentId));
-            if (exists) return;
+            const alreadyExists = selectedItems.some(x => Number(x.payment_id) === Number(paymentId));
+            if (alreadyExists) return;
+
+            if (!collectorSearchSelect.value) {
+                alert("Please choose a collector first in the search filters.");
+                return;
+            }
+
+            if (String(item.collector_id || "") !== String(collectorSearchSelect.value || "")) {
+                alert("Only payments under the selected collector can be added.");
+                return;
+            }
 
             selectedItems.push(item);
             renderSelectedItems();
@@ -655,26 +692,36 @@
         }
 
         function computeSummary() {
-            const totalSelectedPayments = selectedItems.reduce((sum, item) => {
-                return sum + (Number(item.amount) || 0);
-            }, 0);
+            const totalSelectedPayments = round2(
+                selectedItems.reduce((sum, item) => {
+                    return sum + (Number(item.amount) || 0);
+                }, 0)
+            );
 
-            const gas = Number(gasInput.value) || 0;
-            const food = Number(foodInput.value) || 0;
-            const misc = Number(miscInput.value) || 0;
-            const cashOnHand = Number(cashOnHandInput.value) || 0;
-            const commissionPercent = Number(commissionPercentAuto.value) || 0;
+            const gas = round2(gasInput.value);
+            const food = round2(foodInput.value);
+            const misc = round2(miscInput.value);
+            const negativeDeduction = round2(negativeDeductionInput.value);
+            const cashAdvanceDeduction = round2(cashAdvanceDeductionInput.value);
+            const cashOnHand = round2(cashOnHandInput.value);
+            const commissionPercent = round2(commissionPercentAuto.value);
 
-            // NEW FORMULA
-            const totalExpenses = gas + food + misc;
-            const grossTotal = totalSelectedPayments - totalExpenses;
-            const commissionAmount = grossTotal * (commissionPercent / 100);
-            const netTotal = cashOnHand - commissionAmount;
-            const varianceAmount = cashOnHand - grossTotal;
+            const totalExpenses = round2(gas + food + misc);
+            const grossTotal = round2(totalSelectedPayments - totalExpenses);
+            const commissionAmount = round2(grossTotal * (commissionPercent / 100));
+            const finalCommissionPaid = round2(
+                Math.max(0, commissionAmount - negativeDeduction - cashAdvanceDeduction)
+            );
+            const netTotal = round2(cashOnHand - finalCommissionPaid);
+            const varianceAmount = round2(cashOnHand - grossTotal);
 
             totalSelectedPaymentsText.textContent = money(totalSelectedPayments);
             totalExpensesText.textContent = money(totalExpenses);
             commissionAmountText.textContent = money(commissionAmount);
+            negativeDeductionText.textContent = money(negativeDeduction);
+            cashAdvanceDeductionText.textContent = money(cashAdvanceDeduction);
+            finalCommissionPaidText.textContent = money(finalCommissionPaid);
+            finalCommissionPaidAuto.value = money(finalCommissionPaid);
             grossTotalText.textContent = money(grossTotal);
             netTotalText.textContent = money(netTotal);
             varianceAmountText.textContent = money(varianceAmount);
@@ -691,6 +738,10 @@
                 return;
             }
 
+            negativeDeductionInput.value = "0";
+            cashAdvanceDeductionInput.value = "0";
+            computeSummary();
+
             const payload = {
                 collector_id: collectorIdAuto.value,
                 remit_date: remitDateInput.value,
@@ -703,22 +754,44 @@
                 food: foodInput.value,
                 miscellaneous: miscInput.value,
                 commission_percent: commissionPercentAuto.value,
+                negative_deduction: 0,
+                cash_advance_deduction: 0,
+                final_commission_paid: commissionAmountText.textContent,
                 cash_on_hand: cashOnHandInput.value,
                 notes: notesInput.value
             };
 
             const confirmed = confirm(
-                `Please confirm this remit:\n\n` +
-                `Collector ID: ${collectorIdAuto.value}\n` +
-                `Remit Date: ${remitDateInput.value}\n` +
-                `Selected Payments: ${selectedItems.length}\n` +
-                `Total Selected Payments: ₱${totalSelectedPaymentsText.textContent}\n` +
-                `Total Expenses: ₱${totalExpensesText.textContent}\n` +
-                `Gross Total: ₱${grossTotalText.textContent}\n` +
-                `Commission Amount: ₱${commissionAmountText.textContent}\n` +
-                `Cash On Hand: ₱${money(cashOnHandInput.value)}\n` +
-                `Net Total: ₱${netTotalText.textContent}\n` +
-                `Positive/Negative: ₱${varianceAmountText.textContent}\n\n` +
+                `Please confirm this remit:
+
+` +
+                `Collector ID: ${collectorIdAuto.value}
+` +
+                `Remit Date: ${remitDateInput.value}
+` +
+                `Selected Payments: ${selectedItems.length}
+` +
+                `Total Selected Payments: ₱${totalSelectedPaymentsText.textContent}
+` +
+                `Total Expenses: ₱${totalExpensesText.textContent}
+` +
+                `Gross Total: ₱${grossTotalText.textContent}
+` +
+                `Commission Amount: ₱${commissionAmountText.textContent}
+` +
+                `Negative Deduction: ₱0.00
+` +
+                `Cash Advance Deduction: ₱0.00
+` +
+                `Final Commission Paid: ₱${commissionAmountText.textContent}
+` +
+                `Cash On Hand: ₱${money(cashOnHandInput.value)}
+` +
+                `Net Total: ₱${money(round2(cashOnHandInput.value) - round2(commissionAmountText.textContent))}
+` +
+                `Positive/Negative: ₱${varianceAmountText.textContent}
+
+` +
                 `Continue saving?`
             );
 
@@ -747,7 +820,10 @@
             gasInput.value = 0;
             foodInput.value = 0;
             miscInput.value = 0;
+            negativeDeductionInput.value = 0;
+            cashAdvanceDeductionInput.value = 0;
             cashOnHandInput.value = 0;
+            finalCommissionPaidAuto.value = "0.00";
             notesInput.value = "";
             setTodayDate();
 
@@ -772,7 +848,7 @@
 
             if (rows.length === 0) {
                 remitsHistoryBody.innerHTML = `
-                    <tr><td colspan="14">No saved remits found.</td></tr>
+                    <tr><td colspan="17">No saved remits found.</td></tr>
                 `;
             } else {
                 rows.forEach(remit => {
@@ -787,6 +863,9 @@
                             <td>${money(remit.miscellaneous)}</td>
                             <td>${money(remit.commission_percent)}</td>
                             <td>${money(remit.commission_amount)}</td>
+                            <td>${money(remit.negative_deduction)}</td>
+                            <td>${money(remit.cash_advance_deduction)}</td>
+                            <td>${money(remit.final_commission_paid)}</td>
                             <td>${money(remit.gross_total)}</td>
                             <td>${money(remit.cash_on_hand)}</td>
                             <td>${money(remit.net_total)}</td>
@@ -795,6 +874,14 @@
                                 <div class="action-inline">
                                     <button class="warning-btn" type="button" onclick="reopenRemit(${remit.id})">Edit</button>
                                     <button class="remove-btn" type="button" onclick="deleteRemit(${remit.id})">Delete</button>
+                                    ${Number(remit.variance_amount) < 0 &&
+  Number(remit.negative_deduction || 0) === 0 &&
+  Number(remit.negative_deduction_waived || 0) !== 1
+    ? `
+        <button class="secondary-btn" type="button" onclick="deductNegative(${remit.id}, ${Math.abs(Number(remit.variance_amount) || 0)})">Deduct</button>
+        <button class="warning-btn" type="button" onclick="waiveNegativeDeduction(${remit.id}, ${Math.abs(Number(remit.variance_amount) || 0)})">Waive</button>
+      `
+    : ``}
                                 </div>
                             </td>
                         </tr>
@@ -821,6 +908,64 @@
             historyPrevBtn.disabled = historyCurrentPage <= 1;
             historyNextBtn.disabled = historyTotalPages === 0 || historyCurrentPage >= historyTotalPages;
         }
+
+     async function deductNegative(remitId, amount) {
+
+    const confirmed = confirm(
+        `This remit has a shortage of ₱${money(amount)}.\n\n` +
+        `Do you want to deduct this from the collector's commission?`
+    );
+
+    if (!confirmed) return;
+
+    const res = await fetch(`/payables/apply-negative-deduction`, {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+            remit_id: remitId
+        })
+    });
+
+    const data = await res.json();
+
+    if (!res.ok) {
+        alert(data.message || "Failed to apply deduction");
+        return;
+    }
+
+    alert(data.message || "Deduction applied successfully");
+
+    await loadRemitsHistory(historyCurrentPage, historyCurrentLimit);
+}
+
+async function waiveNegativeDeduction(remitId, amount) {
+    const confirmed = confirm(
+        `This remit has a shortage of ₱${money(amount)}.\n\n` +
+        `Waive the Deduct button?\n\n` +
+        `This will NOT remove the negative from Collector Payables.\n` +
+        `You can still record payment manually in Collector Payables.\n\n` +
+        `Continue?`
+    );
+
+    if (!confirmed) return;
+
+    const res = await fetch(`/remits/${remitId}/waive-negative-deduction`, {
+        method: "POST"
+    });
+
+    const data = await res.json();
+
+    if (!res.ok) {
+        alert(data.message || "Failed to waive deduction");
+        return;
+    }
+
+    alert(data.message || "Deduct button waived");
+
+    await loadRemitsHistory(historyCurrentPage, historyCurrentLimit);
+}
 
         async function reopenRemit(remitId) {
             const confirmed = confirm(
@@ -856,7 +1001,10 @@
             gasInput.value = remit.gas || 0;
             foodInput.value = remit.food || 0;
             miscInput.value = remit.miscellaneous || 0;
+            negativeDeductionInput.value = remit.negative_deduction || 0;
+            cashAdvanceDeductionInput.value = remit.cash_advance_deduction || 0;
             cashOnHandInput.value = remit.cash_on_hand || 0;
+            finalCommissionPaidAuto.value = money(remit.final_commission_paid || 0);
             notesInput.value = remit.notes || "";
 
             selectedItems = items;
@@ -919,6 +1067,7 @@
             collectorSearchSelect.value = "";
             collectorIdAuto.value = "";
             commissionPercentAuto.value = "";
+            finalCommissionPaidAuto.value = "0.00";
             searchResults = [];
             hasSearched = false;
             renderSearchResults();
@@ -935,6 +1084,8 @@
         gasInput.addEventListener("input", computeSummary);
         foodInput.addEventListener("input", computeSummary);
         miscInput.addEventListener("input", computeSummary);
+        negativeDeductionInput.addEventListener("input", computeSummary);
+        cashAdvanceDeductionInput.addEventListener("input", computeSummary);
         cashOnHandInput.addEventListener("input", computeSummary);
         document.getElementById("saveRemitBtn").addEventListener("click", saveRemit);
 

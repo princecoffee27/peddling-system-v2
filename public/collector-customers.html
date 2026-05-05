@@ -30,7 +30,7 @@
 
         .filters {
             display: grid;
-            grid-template-columns: 1.2fr 1fr 1fr auto auto;
+            grid-template-columns: 1.2fr 1fr 1fr 1.1fr 0.7fr auto auto;
             gap: 10px;
             align-items: end;
         }
@@ -85,7 +85,7 @@
         table {
             width: 100%;
             border-collapse: collapse;
-            min-width: 1700px;
+            min-width: 2150px;
             background: white;
         }
 
@@ -170,7 +170,7 @@
             flex-wrap: wrap;
         }
 
-        @media (max-width: 1200px) {
+        @media (max-width: 1400px) {
             .filters {
                 grid-template-columns: 1fr 1fr;
             }
@@ -214,6 +214,19 @@
             </div>
 
             <div class="field">
+                <label for="sortOption">Sort By</label>
+                <select id="sortOption">
+                    <option value="">Customer ID (Default)</option>
+                    <option value="dp_desc">Downpayment Date (Newest)</option>
+                    <option value="dp_asc">Downpayment Date (Oldest)</option>
+                    <option value="lastpay_desc">Last Regular Payment (Newest)</option>
+                    <option value="lastpay_asc">Last Regular Payment (Oldest)</option>
+                    <option value="balance_desc">Balance (Highest)</option>
+                    <option value="balance_asc">Balance (Lowest)</option>
+                </select>
+            </div>
+
+            <div class="field">
                 <label for="pageSize">Rows</label>
                 <select id="pageSize">
                     <option value="25">25</option>
@@ -245,6 +258,9 @@
                         <th>Quantity</th>
                         <th>Capital Item Price</th>
                         <th>Selling Item Price</th>
+                        <th>Remaining Balance</th>
+                        <th>Downpayment Date</th>
+                        <th>Last Regular Payment</th>
                         <th>Under Whose Collector</th>
                         <th>Status</th>
                         <th>Actions</th>
@@ -253,7 +269,7 @@
                 </thead>
                 <tbody id="customerTableBody">
                     <tr>
-                        <td colspan="12" class="empty-box">No records loaded yet.</td>
+                        <td colspan="15" class="empty-box">No records loaded yet.</td>
                     </tr>
                 </tbody>
             </table>
@@ -270,6 +286,7 @@
         const collectorFilter = document.getElementById("collectorFilter");
         const customerIdFilter = document.getElementById("customerIdFilter");
         const customerNameFilter = document.getElementById("customerNameFilter");
+        const sortOption = document.getElementById("sortOption");
         const pageSize = document.getElementById("pageSize");
         const searchBtn = document.getElementById("searchBtn");
         const clearBtn = document.getElementById("clearBtn");
@@ -286,6 +303,10 @@
 
         function formatMoney(value) {
             return Number(value || 0).toFixed(2);
+        }
+
+        function displayDate(value) {
+            return value || "";
         }
 
         async function loadCollectors() {
@@ -326,7 +347,7 @@
             if (!rows.length) {
                 customerTableBody.innerHTML = `
                     <tr>
-                        <td colspan="12" class="empty-box">No matching records found.</td>
+                        <td colspan="15" class="empty-box">No matching records found.</td>
                     </tr>
                 `;
                 return;
@@ -340,8 +361,11 @@
                     <td>${row.phone ?? ""}</td>
                     <td>${row.item_bought ?? ""}</td>
                     <td>${row.quantity ?? ""}</td>
-                    <td>${formatMoney(row.capital_price)}</td>
-                    <td>${formatMoney(row.selling_price)}</td>
+                    <td>₱${formatMoney(row.capital_price)}</td>
+                    <td>₱${formatMoney(row.selling_price)}</td>
+                    <td>₱${formatMoney(row.remaining_balance)}</td>
+                    <td>${displayDate(row.downpayment_date)}</td>
+                    <td>${displayDate(row.last_regular_payment_date)}</td>
                     <td>${row.collector_name ?? ""}</td>
                     <td>${row.status_text ?? ""}</td>
                     <td>
@@ -362,7 +386,7 @@
                 </tr>
 
                 <tr id="edit-row-${row.customer_id}" class="edit-row" style="display:none;">
-                    <td colspan="12">
+                    <td colspan="15">
                         <div class="edit-box">
                             <div>
                                 <label>Name</label>
@@ -399,7 +423,8 @@
                 limit: pageSize.value,
                 collector_id: collectorFilter.value,
                 customer_id: customerIdFilter.value.trim(),
-                customer_name: customerNameFilter.value.trim()
+                customer_name: customerNameFilter.value.trim(),
+                sort_option: sortOption.value
             });
 
             try {
@@ -586,6 +611,7 @@
             collectorFilter.value = "";
             customerIdFilter.value = "";
             customerNameFilter.value = "";
+            sortOption.value = "";
             pageSize.value = "50";
             resultInfo.textContent = "No records loaded yet. Use the filters above, then click Search.";
             pageInfo.textContent = "Page 1";
@@ -593,7 +619,7 @@
             currentPage = 1;
             customerTableBody.innerHTML = `
                 <tr>
-                    <td colspan="12" class="empty-box">No records loaded yet.</td>
+                    <td colspan="15" class="empty-box">No records loaded yet.</td>
                 </tr>
             `;
         });

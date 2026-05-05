@@ -14,7 +14,7 @@ router.post("/login", (req, res) => {
     }
 
     const sql = `
-        SELECT id, username, password, role, is_active
+        SELECT id, username, password, role, is_active, privileges
         FROM users
         WHERE username = ?
         LIMIT 1
@@ -50,10 +50,20 @@ router.post("/login", (req, res) => {
             });
         }
 
+        let privileges = {};
+        try {
+            privileges = typeof user.privileges === "string"
+                ? JSON.parse(user.privileges || "{}")
+                : (user.privileges || {});
+        } catch {
+            privileges = {};
+        }
+
         req.session.user = {
             id: user.id,
             username: user.username,
-            role: user.role
+            role: user.role,
+            privileges
         };
 
         res.json({

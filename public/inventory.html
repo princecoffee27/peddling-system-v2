@@ -211,9 +211,21 @@
 
     <div class="card">
         <h2>Inventory List</h2>
-        <p class="muted">Default load is 50 items. Use page size and pagination below.</p>
+        <p class="muted">Default load is 50 items. Use search, page size, and pagination below.</p>
 
         <div class="table-toolbar">
+            <div>
+                <label for="searchInput" style="margin-bottom:0;">Search Item Name</label>
+                <input 
+                    type="text" 
+                    id="searchInput" 
+                    placeholder="Type item name..." 
+                    style="margin-left:10px; width:260px;"
+                >
+                <button type="button" id="searchBtn">Search</button>
+                <button type="button" id="clearSearchBtn" class="secondary-btn">Clear</button>
+            </div>
+
             <div>
                 <label for="pageSizeSelect" style="margin-bottom:0;">Rows per page</label>
                 <select id="pageSizeSelect" style="margin-left:10px; width:auto;">
@@ -261,11 +273,15 @@
         const nextPageBtn = document.getElementById("nextPageBtn");
         const pageInfo = document.getElementById("pageInfo");
         const tableSummary = document.getElementById("tableSummary");
+        const searchInput = document.getElementById("searchInput");
+        const searchBtn = document.getElementById("searchBtn");
+        const clearSearchBtn = document.getElementById("clearSearchBtn");
 
         let editingItemId = null;
         let currentPage = 1;
         let totalPages = 1;
         let currentLimit = 50;
+        let currentSearch = "";
 
         function resetForm() {
             form.reset();
@@ -281,7 +297,9 @@
             currentLimit = Number(limit);
 
             try {
-                const res = await fetch(`/inventory?page=${currentPage}&limit=${currentLimit}`);
+                const searchParam = encodeURIComponent(currentSearch);
+
+                const res = await fetch(`/inventory?page=${currentPage}&limit=${currentLimit}&search=${searchParam}`);
                 const data = await res.json();
 
                 if (!res.ok) {
@@ -353,7 +371,12 @@
             currentLimit = pagination.limit || currentLimit;
 
             pageInfo.textContent = `Page ${currentPage} of ${totalPages} | Total: ${pagination.total || 0}`;
-            tableSummary.textContent = `${currentLimit} rows per page`;
+
+            if (currentSearch) {
+                tableSummary.textContent = `${currentLimit} rows per page | Search: "${currentSearch}"`;
+            } else {
+                tableSummary.textContent = `${currentLimit} rows per page`;
+            }
 
             prevPageBtn.disabled = currentPage <= 1;
             nextPageBtn.disabled = currentPage >= totalPages || totalPages === 0;
@@ -499,9 +522,28 @@
             }
         });
 
+        searchBtn.addEventListener("click", async () => {
+            currentSearch = searchInput.value.trim();
+            await loadInventory(1, currentLimit);
+        });
+
+        searchInput.addEventListener("keyup", async (e) => {
+            if (e.key === "Enter") {
+                currentSearch = searchInput.value.trim();
+                await loadInventory(1, currentLimit);
+            }
+        });
+
+        clearSearchBtn.addEventListener("click", async () => {
+            searchInput.value = "";
+            currentSearch = "";
+            await loadInventory(1, currentLimit);
+        });
+
         async function initPage() {
             pageSizeSelect.value = "50";
             currentLimit = 50;
+            currentSearch = "";
             await loadInventory(1, 50);
         }
 

@@ -1,8 +1,8 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Collector Business Report</title>
     <style>
         body {
@@ -25,44 +25,56 @@
 
         .filter-grid {
             display: grid;
-            grid-template-columns: 1.4fr 1fr 1fr auto;
-            gap: 14px;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 12px;
             align-items: end;
+        }
+
+        .main-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            align-items: start;
+        }
+
+        .toolbar-line {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 12px;
+            flex-wrap: wrap;
+            margin-bottom: 12px;
+        }
+
+        .toolbar-actions {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
         }
 
         .summary-grid {
             display: grid;
             grid-template-columns: repeat(4, 1fr);
-            gap: 16px;
+            gap: 12px;
+            margin-top: 10px;
         }
 
         .summary-box {
             background: #f8fafc;
             border: 1px solid #ddd;
             border-radius: 10px;
-            padding: 16px;
+            padding: 14px;
         }
 
-        .summary-box h3 {
+        .summary-box h4 {
             margin: 0 0 8px 0;
-            font-size: 16px;
+            font-size: 13px;
+            color: #111827;
         }
 
         .summary-box .value {
-            font-size: 24px;
+            font-size: 14px;
             font-weight: bold;
-        }
-
-        .good {
-            color: #15803d;
-        }
-
-        .bad {
-            color: #b91c1c;
-        }
-
-        .neutral {
-            color: #334155;
         }
 
         label {
@@ -87,11 +99,40 @@
             background: #2563eb;
             color: white;
             cursor: pointer;
-            font-size: 15px;
+            font-size: 14px;
         }
 
         button:hover {
             background: #1d4ed8;
+        }
+
+        button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        .secondary-btn {
+            background: #64748b;
+        }
+
+        .secondary-btn:hover {
+            background: #475569;
+        }
+
+        .add-btn {
+            background: #16a34a;
+        }
+
+        .add-btn:hover {
+            background: #15803d;
+        }
+
+        .remove-btn {
+            background: #dc2626;
+        }
+
+        .remove-btn:hover {
+            background: #b91c1c;
         }
 
         .table-wrap {
@@ -106,7 +147,7 @@
         table {
             width: 100%;
             border-collapse: collapse;
-            min-width: 1100px;
+            min-width: 1200px;
         }
 
         th, td {
@@ -114,6 +155,7 @@
             border-bottom: 1px solid #ddd;
             text-align: left;
             white-space: nowrap;
+            vertical-align: top;
         }
 
         th {
@@ -121,6 +163,52 @@
             position: sticky;
             top: 0;
             z-index: 1;
+        }
+
+        .dates-cell {
+            white-space: normal;
+            min-width: 220px;
+            line-height: 1.4;
+        }
+
+        .muted {
+            color: #666;
+            font-size: 13px;
+        }
+
+        .note {
+            font-size: 12px;
+            color: #6b7280;
+            margin-top: 8px;
+        }
+
+        .pagination-box {
+            margin-top: 12px;
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .pagination-box select {
+            width: auto;
+            padding: 8px;
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        .label-green {
+            color: #16a34a;
+            font-size: 12px;
+            margin-top: 4px;
+        }
+
+        .label-red {
+            color: #dc2626;
+            font-size: 12px;
+            margin-top: 4px;
         }
 
         .interpret-box {
@@ -131,17 +219,30 @@
             line-height: 1.7;
         }
 
-        .hidden {
-            display: none;
+        .mini-badge {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 999px;
+            background: #eef2ff;
+            color: #3730a3;
+            font-size: 12px;
+            font-weight: bold;
+            margin-right: 6px;
         }
 
-        @media (max-width: 1100px) {
-            .filter-grid {
-                grid-template-columns: 1fr;
+        @media (max-width: 1200px) {
+            .summary-grid {
+                grid-template-columns: repeat(2, 1fr);
             }
 
-            .summary-grid {
-                grid-template-columns: 1fr 1fr;
+            .main-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        @media (max-width: 900px) {
+            .filter-grid {
+                grid-template-columns: 1fr;
             }
         }
 
@@ -157,7 +258,7 @@
     <p><a href="/">Back to Home</a></p>
 
     <div class="card">
-        <h2>Report Filters</h2>
+        <h2>Search Customers For This Report Batch</h2>
 
         <div class="filter-grid">
             <div>
@@ -165,6 +266,21 @@
                 <select id="collector_id">
                     <option value="">Select collector</option>
                 </select>
+            </div>
+
+            <div>
+                <label for="customer_id_from">Customer ID From</label>
+                <input type="number" id="customer_id_from" min="1">
+            </div>
+
+            <div>
+                <label for="customer_id_to">Customer ID To</label>
+                <input type="number" id="customer_id_to" min="1">
+            </div>
+
+            <div>
+                <label for="customer_name">Customer Name</label>
+                <input type="text" id="customer_name" placeholder="Search customer name">
             </div>
 
             <div>
@@ -176,9 +292,96 @@
                 <label for="date_to">Date To</label>
                 <input type="date" id="date_to">
             </div>
+        </div>
 
-            <div>
-                <button id="generateBtn" type="button">Generate Report</button>
+        <div class="toolbar-actions" style="margin-top: 15px;">
+            <button id="searchBtn" type="button">Search Customers</button>
+            <button id="clearSearchBtn" class="secondary-btn" type="button">Clear Search Filters</button>
+        </div>
+    </div>
+
+    <div class="main-grid">
+        <div class="card">
+            <h2>Search Results</h2>
+            <p class="muted">You can search many times and keep adding customers into the selected batch on the right side.</p>
+
+            <div class="toolbar-line">
+                <div id="searchSummary" class="muted">No search yet</div>
+                <div class="toolbar-actions">
+                    <button id="addAllBtn" class="add-btn" type="button">Add All</button>
+                </div>
+            </div>
+
+            <div class="table-wrap">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Action</th>
+                            <th>Customer ID</th>
+                            <th>Customer Name</th>
+                            <th>Address</th>
+                            <th>Total Sales</th>
+                            <th>Total Items Sold</th>
+                            <th>Total Remaining Balance</th>
+                            <th>Regular Payment Dates</th>
+                            <th>Collector</th>
+                        </tr>
+                    </thead>
+                    <tbody id="searchResultsBody">
+                        <tr>
+                            <td colspan="9">No search yet.</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="pagination-box">
+                <label for="searchPageSizeSelect" style="margin-bottom:0;">Rows per page</label>
+                <select id="searchPageSizeSelect">
+                    <option value="25">25</option>
+                    <option value="50">50</option>
+                    <option value="100">100</option>
+                </select>
+                <button id="searchPrevBtn" class="secondary-btn" type="button">Previous</button>
+                <span id="searchPageInfo" class="muted">Page 0 of 0 | Total: 0</span>
+                <button id="searchNextBtn" class="secondary-btn" type="button">Next</button>
+            </div>
+        </div>
+
+        <div class="card">
+            <h2>Selected Customers For This Batch</h2>
+            <p class="muted">The report will only use customers added here.</p>
+
+            <div class="toolbar-line">
+                <div id="selectedSummary" class="muted">0 selected customer(s)</div>
+                <div class="toolbar-actions">
+                    <button id="clearSelectedBtn" class="remove-btn" type="button">Clear Selected Batch</button>
+<button id="generateBtn" type="button">Generate Report</button>
+<button id="downloadExcelBtn" class="secondary-btn" type="button" disabled>Download Excel</button>
+                </div>
+            </div>
+
+            <div class="table-wrap">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Action</th>
+                            <th>Customer ID</th>
+                            <th>Customer Name</th>
+                            <th>Address</th>
+                            <th>Total Sales</th>
+                            <th>Total Items Sold</th>
+                            <th>Total Remaining Balance</th>
+                            <th>Regular Payment Dates</th>
+                            <th>Collector</th>
+                        </tr>
+                    </thead>
+                    <tbody id="selectedCustomersBody">
+                        <tr>
+                            <td colspan="9">No selected customers yet.</td>
+                        </tr>
+                    </tbody>
+                </table>
             </div>
         </div>
     </div>
@@ -186,57 +389,89 @@
     <div id="reportSection" class="hidden">
         <div class="card">
             <h2 id="reportTitle">Report Summary</h2>
+            <div id="selectedCustomerBadgeLine" class="muted" style="margin-bottom: 10px;"></div>
 
             <div class="summary-grid">
                 <div class="summary-box">
-                    <h3>Total Payments Collected</h3>
-                    <div class="value" id="totalPaymentsCollected">₱0.00</div>
+                    <h4>Total Payments Collected</h4>
+                    <div id="totalPaymentsCollected" class="value">₱0.00</div>
                 </div>
 
                 <div class="summary-box">
-                    <h3>Total Remaining Balance</h3>
-                    <div class="value" id="totalRemainingBalance">₱0.00</div>
+                    <h4>Total Remaining Balance</h4>
+                    <div id="totalRemainingBalance" class="value">₱0.00</div>
                 </div>
 
                 <div class="summary-box">
-                    <h3>Total Item Capital</h3>
-                    <div class="value" id="totalItemCapital">₱0.00</div>
+                    <h4>Total Item Capital</h4>
+                    <div id="totalItemCapital" class="value">₱0.00</div>
                 </div>
 
                 <div class="summary-box">
-                    <h3>Total Expenses</h3>
-                    <div class="value" id="totalExpenses">₱0.00</div>
+                    <h4>Total Expenses</h4>
+                    <div id="totalExpenses" class="value">₱0.00</div>
                 </div>
 
                 <div class="summary-box">
-                    <h3>Cash On Hand Given</h3>
-                    <div class="value" id="totalCashOnHand">₱0.00</div>
+                    <h4>Cash On Hand Given</h4>
+                    <div id="totalCashOnHand" class="value">₱0.00</div>
                 </div>
 
                 <div class="summary-box">
-                    <h3>Business Result</h3>
-                    <div class="value" id="businessResultAmount">₱0.00</div>
-                    <div id="businessResultLabel" class="neutral"></div>
+                    <h4>Business Result</h4>
+                    <div id="businessResultAmount" class="value">₱0.00</div>
+                    <div id="businessResultLabel" class="label-green"></div>
                 </div>
 
                 <div class="summary-box">
-                    <h3>Collector Result</h3>
-                    <div class="value" id="collectorResultAmount">₱0.00</div>
-                    <div id="collectorResultLabel" class="neutral"></div>
+                    <h4>Collector Result</h4>
+                    <div id="collectorResultAmount" class="value">₱0.00</div>
+                    <div id="collectorResultLabel" class="label-green"></div>
                 </div>
 
                 <div class="summary-box">
-                    <h3>Commission %</h3>
-                    <div class="value" id="commissionPercent">0.00%</div>
+                    <h4>Commission %</h4>
+                    <div id="commissionPercent" class="value">0.00%</div>
                 </div>
+
+                <div class="summary-box">
+                    <h4>Total Customers</h4>
+                    <div id="totalCustomers" class="value">0</div>
+                </div>
+
+                <div class="summary-box">
+                    <h4>Total Items Sold</h4>
+                    <div id="totalItemsSold" class="value">0</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <h2>Product Ranking</h2>
+
+            <div class="summary-grid">
+                <div class="summary-box">
+                    <h4>Most Salable Item</h4>
+                    <div id="mostSalableItem" class="value">No data</div>
+                    <div id="mostSalableItemMeta" class="label-green"></div>
+                </div>
+
+                <div class="summary-box">
+                    <h4>Least Salable Item</h4>
+                    <div id="leastSalableItem" class="value">No data</div>
+                    <div id="leastSalableItemMeta" class="label-red"></div>
+                </div>
+            </div>
+
+            <div class="note">
+                Ranking below uses only the selected customers from this report batch.
             </div>
         </div>
 
         <div class="card">
             <h2>Interpretation</h2>
             <div class="interpret-box">
-                <div id="businessInterpretation"></div>
-                <div id="collectorInterpretation"></div>
+                <div id="interpretationText"></div>
             </div>
         </div>
 
@@ -256,6 +491,13 @@
                     </thead>
                     <tbody id="paymentsBody"></tbody>
                 </table>
+            </div>
+            <div class="pagination-box" data-detail="payments">
+                <label style="margin-bottom:0;">Rows per page</label>
+                <select id="paymentsLimit"><option value="25">25</option><option value="50">50</option><option value="100">100</option></select>
+                <button id="paymentsPrev" class="secondary-btn" type="button">Previous</button>
+                <span id="paymentsInfo" class="muted">Page 0 of 0 | Total: 0</span>
+                <button id="paymentsNext" class="secondary-btn" type="button">Next</button>
             </div>
         </div>
 
@@ -277,6 +519,39 @@
                     <tbody id="balancesBody"></tbody>
                 </table>
             </div>
+            <div class="pagination-box" data-detail="balances">
+                <label style="margin-bottom:0;">Rows per page</label>
+                <select id="balancesLimit"><option value="25">25</option><option value="50">50</option><option value="100">100</option></select>
+                <button id="balancesPrev" class="secondary-btn" type="button">Previous</button>
+                <span id="balancesInfo" class="muted">Page 0 of 0 | Total: 0</span>
+                <button id="balancesNext" class="secondary-btn" type="button">Next</button>
+            </div>
+        </div>
+
+        <div class="card">
+            <h2>All Items Ranked From Most Sold to Least Sold</h2>
+            <div class="table-wrap">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Rank</th>
+                            <th>Item Name</th>
+                            <th>Total Quantity Ordered</th>
+                            <th>Total Sales Count</th>
+                            <th>Total Selling Value</th>
+                            <th>Total Capital Value</th>
+                        </tr>
+                    </thead>
+                    <tbody id="itemRankingBody"></tbody>
+                </table>
+            </div>
+            <div class="pagination-box" data-detail="item_ranking">
+                <label style="margin-bottom:0;">Rows per page</label>
+                <select id="itemRankingLimit"><option value="25">25</option><option value="50">50</option><option value="100">100</option></select>
+                <button id="itemRankingPrev" class="secondary-btn" type="button">Previous</button>
+                <span id="itemRankingInfo" class="muted">Page 0 of 0 | Total: 0</span>
+                <button id="itemRankingNext" class="secondary-btn" type="button">Next</button>
+            </div>
         </div>
 
         <div class="card">
@@ -296,6 +571,13 @@
                     </thead>
                     <tbody id="capitalBody"></tbody>
                 </table>
+            </div>
+            <div class="pagination-box" data-detail="capital">
+                <label style="margin-bottom:0;">Rows per page</label>
+                <select id="capitalLimit"><option value="25">25</option><option value="50">50</option><option value="100">100</option></select>
+                <button id="capitalPrev" class="secondary-btn" type="button">Previous</button>
+                <span id="capitalInfo" class="muted">Page 0 of 0 | Total: 0</span>
+                <button id="capitalNext" class="secondary-btn" type="button">Next</button>
             </div>
         </div>
 
@@ -318,6 +600,13 @@
                     </thead>
                     <tbody id="expensesBody"></tbody>
                 </table>
+            </div>
+            <div class="pagination-box" data-detail="expenses">
+                <label style="margin-bottom:0;">Rows per page</label>
+                <select id="expensesLimit"><option value="25">25</option><option value="50">50</option><option value="100">100</option></select>
+                <button id="expensesPrev" class="secondary-btn" type="button">Previous</button>
+                <span id="expensesInfo" class="muted">Page 0 of 0 | Total: 0</span>
+                <button id="expensesNext" class="secondary-btn" type="button">Next</button>
             </div>
         </div>
 
@@ -344,15 +633,57 @@
                     <tbody id="remitsBody"></tbody>
                 </table>
             </div>
+            <div class="pagination-box" data-detail="remits">
+                <label style="margin-bottom:0;">Rows per page</label>
+                <select id="remitsLimit"><option value="25">25</option><option value="50">50</option><option value="100">100</option></select>
+                <button id="remitsPrev" class="secondary-btn" type="button">Previous</button>
+                <span id="remitsInfo" class="muted">Page 0 of 0 | Total: 0</span>
+                <button id="remitsNext" class="secondary-btn" type="button">Next</button>
+            </div>
         </div>
     </div>
 
     <script>
         const collectorSelect = document.getElementById("collector_id");
+        const customerIdFromInput = document.getElementById("customer_id_from");
+        const customerIdToInput = document.getElementById("customer_id_to");
+        const customerNameInput = document.getElementById("customer_name");
         const dateFromInput = document.getElementById("date_from");
         const dateToInput = document.getElementById("date_to");
+        const searchBtn = document.getElementById("searchBtn");
+        const clearSearchBtn = document.getElementById("clearSearchBtn");
+        const addAllBtn = document.getElementById("addAllBtn");
+        const clearSelectedBtn = document.getElementById("clearSelectedBtn");
         const generateBtn = document.getElementById("generateBtn");
+        const searchResultsBody = document.getElementById("searchResultsBody");
+        const selectedCustomersBody = document.getElementById("selectedCustomersBody");
+        const searchSummary = document.getElementById("searchSummary");
+        const selectedSummary = document.getElementById("selectedSummary");
         const reportSection = document.getElementById("reportSection");
+        const downloadExcelBtn = document.getElementById("downloadExcelBtn");
+
+        const searchPageSizeSelect = document.getElementById("searchPageSizeSelect");
+        const searchPrevBtn = document.getElementById("searchPrevBtn");
+        const searchNextBtn = document.getElementById("searchNextBtn");
+        const searchPageInfo = document.getElementById("searchPageInfo");
+
+       let searchResults = [];
+let selectedCustomersMap = new Map();
+let latestReportData = null;
+
+let searchCurrentPage = 1;
+let searchCurrentLimit = 25;
+let searchTotalPages = 0;
+
+let latestReportFilters = null;
+const detailStates = {
+    payments: { page: 1, limit: 25, totalPages: 0 },
+    balances: { page: 1, limit: 25, totalPages: 0 },
+    item_ranking: { page: 1, limit: 25, totalPages: 0 },
+    capital: { page: 1, limit: 25, totalPages: 0 },
+    expenses: { page: 1, limit: 25, totalPages: 0 },
+    remits: { page: 1, limit: 25, totalPages: 0 }
+};
 
         function money(value) {
             return `₱${Number(value || 0).toFixed(2)}`;
@@ -360,6 +691,15 @@
 
         function today() {
             return new Date().toISOString().split("T")[0];
+        }
+
+        function escapeHtml(value) {
+            return String(value ?? "")
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;")
+                .replace(/\"/g, "&quot;")
+                .replace(/'/g, "&#039;");
         }
 
         async function loadCollectors() {
@@ -376,9 +716,7 @@
 
                 data.forEach(collector => {
                     collectorSelect.innerHTML += `
-                        <option value="${collector.id}">
-                            ${collector.id} - ${collector.name}
-                        </option>
+                        <option value="${collector.id}">${collector.id} - ${escapeHtml(collector.name)}</option>
                     `;
                 });
             } catch (error) {
@@ -387,9 +725,198 @@
             }
         }
 
+        function clearSearchFilters() {
+            customerIdFromInput.value = "";
+            customerIdToInput.value = "";
+            customerNameInput.value = "";
+        }
+
+        function renderSearchResults() {
+            searchResultsBody.innerHTML = "";
+
+            if (searchResults.length === 0) {
+                searchResultsBody.innerHTML = `<tr><td colspan="9">No customers found.</td></tr>`;
+                return;
+            }
+
+            searchResults.forEach(row => {
+                const alreadyAdded = selectedCustomersMap.has(String(row.id));
+
+                searchResultsBody.innerHTML += `
+                    <tr>
+                        <td>
+                            <button
+                                type="button"
+                                class="add-btn"
+                                onclick="addSingleCustomer(${Number(row.id)})"
+                                ${alreadyAdded ? "disabled" : ""}
+                            >
+                                ${alreadyAdded ? "Added" : "Add"}
+                            </button>
+                        </td>
+                        <td>${Number(row.id)}</td>
+                        <td>${escapeHtml(row.name)}</td>
+                        <td>${escapeHtml(row.address || "")}</td>
+                        <td>${Number(row.total_sales || 0)}</td>
+                        <td>${Number(row.total_items_sold || 0)}</td>
+                        <td>${money(row.total_remaining_balance)}</td>
+                        <td class="dates-cell">${escapeHtml(row.regular_payment_dates || "No regular payments yet")}</td>
+                        <td>${escapeHtml(row.collector_name || "")}</td>
+                    </tr>
+                `;
+            });
+        }
+
+        function updateSearchPagination(pagination) {
+            searchCurrentPage = pagination.page || 0;
+            searchCurrentLimit = pagination.limit || searchCurrentLimit;
+            searchTotalPages = pagination.totalPages || 0;
+
+            searchPageInfo.textContent = `Page ${searchCurrentPage} of ${searchTotalPages} | Total: ${pagination.total || 0}`;
+            searchPrevBtn.disabled = searchCurrentPage <= 1;
+            searchNextBtn.disabled = searchTotalPages === 0 || searchCurrentPage >= searchTotalPages;
+            searchPageSizeSelect.value = String(searchCurrentLimit);
+        }
+
+        function renderSelectedCustomers() {
+            selectedCustomersBody.innerHTML = "";
+            const rows = [...selectedCustomersMap.values()].sort((a, b) => Number(a.id) - Number(b.id));
+
+            selectedSummary.textContent = `${rows.length} selected customer(s)`;
+
+            if (rows.length === 0) {
+                selectedCustomersBody.innerHTML = `<tr><td colspan="9">No selected customers yet.</td></tr>`;
+                return;
+            }
+
+            rows.forEach(row => {
+                selectedCustomersBody.innerHTML += `
+                    <tr>
+                        <td>
+                            <button
+                                type="button"
+                                class="remove-btn"
+                                onclick="removeSelectedCustomer(${Number(row.id)})"
+                            >Remove</button>
+                        </td>
+                        <td>${Number(row.id)}</td>
+                        <td>${escapeHtml(row.name)}</td>
+                        <td>${escapeHtml(row.address || "")}</td>
+                        <td>${Number(row.total_sales || 0)}</td>
+                        <td>${Number(row.total_items_sold || 0)}</td>
+                        <td>${money(row.total_remaining_balance)}</td>
+                        <td class="dates-cell">${escapeHtml(row.regular_payment_dates || "No regular payments yet")}</td>
+                        <td>${escapeHtml(row.collector_name || "")}</td>
+                    </tr>
+                `;
+            });
+        }
+
+        function addSingleCustomer(customerId) {
+            const customer = searchResults.find(row => Number(row.id) === Number(customerId));
+            if (!customer) return;
+
+            const key = String(customer.id);
+            if (selectedCustomersMap.has(key)) return;
+
+            selectedCustomersMap.set(key, customer);
+            renderSearchResults();
+            renderSelectedCustomers();
+        }
+
+        function removeSelectedCustomer(customerId) {
+            selectedCustomersMap.delete(String(customerId));
+            renderSearchResults();
+            renderSelectedCustomers();
+        }
+
+        window.addSingleCustomer = addSingleCustomer;
+        window.removeSelectedCustomer = removeSelectedCustomer;
+
+        async function searchCustomers(page = 1, limit = searchCurrentLimit) {
+    const collectorId = collectorSelect.value;
+    const dateFrom = dateFromInput.value;
+    const dateTo = dateToInput.value;
+
+    if (!collectorId) {
+        alert("Please select collector first");
+        return;
+    }
+
+    if (!dateFrom || !dateTo) {
+        alert("Please select date from and date to");
+        return;
+    }
+
+    try {
+        const params = new URLSearchParams();
+        params.append("collector_id", collectorId);
+        params.append("date_from", dateFrom);
+        params.append("date_to", dateTo);
+        params.append("page", page);
+        params.append("limit", limit);
+
+        if (customerIdFromInput.value) params.append("customer_id_from", customerIdFromInput.value);
+        if (customerIdToInput.value) params.append("customer_id_to", customerIdToInput.value);
+        if (customerNameInput.value.trim()) params.append("customer_name", customerNameInput.value.trim());
+
+        const res = await fetch(`/reports/search-customers?${params.toString()}`);
+        const data = await res.json();
+
+        if (!res.ok) {
+            alert(data.message || "Failed to search customers");
+            return;
+        }
+
+        searchResults = Array.isArray(data.rows) ? data.rows : [];
+        searchSummary.textContent = `${data.pagination?.total || searchResults.length} customer(s) found | showing ${searchResults.length}`;
+        renderSearchResults();
+        updateSearchPagination(data.pagination || {
+            page: 1,
+            limit,
+            total: searchResults.length,
+            totalPages: searchResults.length > 0 ? 1 : 0
+        });
+    } catch (error) {
+        console.log(error);
+        alert("Could not search customers");
+    }
+}
+
+
+        function addAllSearchResults() {
+            let addedCount = 0;
+
+            searchResults.forEach(row => {
+                const key = String(row.id);
+                if (!selectedCustomersMap.has(key)) {
+                    selectedCustomersMap.set(key, row);
+                    addedCount += 1;
+                }
+            });
+
+            renderSearchResults();
+            renderSelectedCustomers();
+
+            if (searchResults.length > 0) {
+                alert(`${addedCount} customer(s) added to selected batch.`);
+            }
+        }
+
+        function clearSelectedBatch() {
+            selectedCustomersMap.clear();
+            renderSearchResults();
+            renderSelectedCustomers();
+        }
+
         function renderSummary(data) {
             document.getElementById("reportTitle").textContent =
                 `Report Summary: ${data.filters.collector_name} (${data.filters.date_from} to ${data.filters.date_to})`;
+
+            document.getElementById("selectedCustomerBadgeLine").innerHTML = `
+                <span class="mini-badge">Selected customers: ${Number(data.summary.total_customers || 0)}</span>
+                This report uses only the customers added into the selected batch.
+            `;
 
             document.getElementById("totalPaymentsCollected").textContent = money(data.summary.total_payments_collected);
             document.getElementById("totalRemainingBalance").textContent = money(data.summary.total_remaining_balance);
@@ -399,23 +926,51 @@
             document.getElementById("businessResultAmount").textContent = money(data.summary.business_result_amount);
             document.getElementById("collectorResultAmount").textContent = money(data.summary.collector_result_amount);
             document.getElementById("commissionPercent").textContent = `${Number(data.filters.commission_percent || 0).toFixed(2)}%`;
+            document.getElementById("totalCustomers").textContent = Number(data.summary.total_customers || 0);
+            document.getElementById("totalItemsSold").textContent = Number(data.summary.total_items_sold || 0);
 
             const businessLabel = document.getElementById("businessResultLabel");
             businessLabel.textContent = data.summary.business_result_label;
-            businessLabel.className = data.summary.business_result_amount < 0 ? "bad" : (data.summary.business_result_amount > 0 ? "good" : "neutral");
+            businessLabel.className = data.summary.business_result_label === "Negative" ? "label-red" : "label-green";
 
             const collectorLabel = document.getElementById("collectorResultLabel");
             collectorLabel.textContent = data.summary.collector_result_label;
-            collectorLabel.className = data.summary.collector_result_amount < 0 ? "bad" : (data.summary.collector_result_amount > 0 ? "good" : "neutral");
+            collectorLabel.className = Number(data.summary.collector_result_amount || 0) < 0 ? "label-red" : "label-green";
 
-            document.getElementById("businessInterpretation").innerHTML =
-                `<strong>Business Status:</strong> ${data.summary.business_result_label} — ` +
-                `Payments collected ${money(data.summary.total_payments_collected)} minus item capital ${money(data.summary.total_item_capital)} ` +
-                `and expenses ${money(data.summary.total_expenses)} = ${money(data.summary.business_result_amount)}.`;
+            const most = data.summary.most_salable_item;
+            const least = data.summary.least_salable_item;
 
-            document.getElementById("collectorInterpretation").innerHTML =
-                `<strong>Collector Status:</strong> ${data.summary.collector_result_label} — ` +
-                `Based on total variance/shortage/excess of ${money(data.summary.collector_result_amount)} from remits and cash on hand.`;
+            document.getElementById("mostSalableItem").textContent = most ? most.item_name : "No data";
+            document.getElementById("mostSalableItemMeta").textContent =
+                most ? `${Number(most.total_quantity_ordered || 0)} qty | ${Number(most.total_sales_count || 0)} sale record(s)` : "";
+
+            document.getElementById("leastSalableItem").textContent = least ? least.item_name : "No data";
+            document.getElementById("leastSalableItemMeta").textContent =
+                least ? `${Number(least.total_quantity_ordered || 0)} qty | ${Number(least.total_sales_count || 0)} sale record(s)` : "";
+
+            document.getElementById("interpretationText").innerHTML = `
+                <strong>Batch Scope:</strong> ${Number(data.summary.total_customers || 0)} selected customer(s) only.<br>
+
+                <strong>Business Status:</strong> ${data.summary.business_result_label}
+                — Payments collected ${money(data.summary.total_payments_collected)}
+                minus item capital ${money(data.summary.total_item_capital)}
+                and expenses ${money(data.summary.total_expenses)}
+                = <strong>${money(data.summary.business_result_amount)}</strong>.<br>
+
+                <strong>Collector Status:</strong> ${data.summary.collector_result_label}
+                — Based on total variance/shortage/excess of
+                <strong>${money(data.summary.collector_result_amount)}</strong>
+                from remits and cash on hand.<br>
+
+                <strong>Total Customers:</strong> ${Number(data.summary.total_customers || 0)}.<br>
+                <strong>Total Items Sold:</strong> ${Number(data.summary.total_items_sold || 0)}.<br>
+
+                <strong>Most Salable Item:</strong>
+                ${most ? `${escapeHtml(most.item_name)} (${Number(most.total_quantity_ordered || 0)} qty)` : "No data"}.<br>
+
+                <strong>Least Salable Item:</strong>
+                ${least ? `${escapeHtml(least.item_name)} (${Number(least.total_quantity_ordered || 0)} qty)` : "No data"}.
+            `;
         }
 
         function renderPayments(rows) {
@@ -423,7 +978,7 @@
             body.innerHTML = "";
 
             if (rows.length === 0) {
-                body.innerHTML = `<tr><td colspan="6">No payments found in this date range.</td></tr>`;
+                body.innerHTML = `<tr><td colspan="6">No payments found for the selected batch and date range.</td></tr>`;
                 return;
             }
 
@@ -432,10 +987,10 @@
                     <tr>
                         <td>${row.payment_id}</td>
                         <td>${row.customer_id}</td>
-                        <td>${row.customer_name}</td>
+                        <td>${escapeHtml(row.customer_name)}</td>
                         <td>${money(row.amount)}</td>
                         <td>${row.payment_date}</td>
-                        <td>${row.payment_type}</td>
+                        <td>${escapeHtml(row.payment_type)}</td>
                     </tr>
                 `;
             });
@@ -446,7 +1001,7 @@
             body.innerHTML = "";
 
             if (rows.length === 0) {
-                body.innerHTML = `<tr><td colspan="7">No balance records found.</td></tr>`;
+                body.innerHTML = `<tr><td colspan="7">No remaining balances for the selected batch.</td></tr>`;
                 return;
             }
 
@@ -455,11 +1010,34 @@
                     <tr>
                         <td>${row.sale_id}</td>
                         <td>${row.customer_id}</td>
-                        <td>${row.customer_name}</td>
-                        <td>${row.item_name}</td>
-                        <td>${row.quantity}</td>
+                        <td>${escapeHtml(row.customer_name)}</td>
+                        <td>${escapeHtml(row.item_name)}</td>
+                        <td>${Number(row.quantity || 0)}</td>
                         <td>${money(row.balance)}</td>
-                        <td>${row.collector_name || ""}</td>
+                        <td>${escapeHtml(row.collector_name)}</td>
+                    </tr>
+                `;
+            });
+        }
+
+        function renderItemRanking(rows) {
+            const body = document.getElementById("itemRankingBody");
+            body.innerHTML = "";
+
+            if (rows.length === 0) {
+                body.innerHTML = `<tr><td colspan="6">No item ranking data for this selected batch.</td></tr>`;
+                return;
+            }
+
+            rows.forEach((row, index) => {
+                body.innerHTML += `
+                    <tr>
+                        <td>${index + 1}</td>
+                        <td>${escapeHtml(row.item_name)}</td>
+                        <td>${Number(row.total_quantity_ordered || 0)}</td>
+                        <td>${Number(row.total_sales_count || 0)}</td>
+                        <td>${money(row.total_selling_value)}</td>
+                        <td>${money(row.total_capital_value)}</td>
                     </tr>
                 `;
             });
@@ -470,7 +1048,7 @@
             body.innerHTML = "";
 
             if (rows.length === 0) {
-                body.innerHTML = `<tr><td colspan="7">No capital records found.</td></tr>`;
+                body.innerHTML = `<tr><td colspan="7">No item capital data for this selected batch.</td></tr>`;
                 return;
             }
 
@@ -479,9 +1057,9 @@
                     <tr>
                         <td>${row.sale_id}</td>
                         <td>${row.customer_id}</td>
-                        <td>${row.customer_name}</td>
-                        <td>${row.item_name}</td>
-                        <td>${row.quantity}</td>
+                        <td>${escapeHtml(row.customer_name)}</td>
+                        <td>${escapeHtml(row.item_name)}</td>
+                        <td>${Number(row.quantity || 0)}</td>
                         <td>${money(row.capital_price)}</td>
                         <td>${money(row.capital_total)}</td>
                     </tr>
@@ -507,9 +1085,9 @@
                         <td>${money(row.gasoline)}</td>
                         <td>${money(row.miscellaneous)}</td>
                         <td>${money(row.total_expense)}</td>
-                        <td>${row.route || ""}</td>
-                        <td>${row.expense_type || ""}</td>
-                        <td>${row.notes || ""}</td>
+                        <td>${escapeHtml(row.route || "")}</td>
+                        <td>${escapeHtml(row.expense_type || "")}</td>
+                        <td>${escapeHtml(row.notes || "")}</td>
                     </tr>
                 `;
             });
@@ -530,8 +1108,8 @@
                         <td>${row.id}</td>
                         <td>${row.remit_date}</td>
                         <td>${money(row.total_selected_payments)}</td>
-                        <td>${money(row.gas)}</td>
-                        <td>${money(row.food)}</td>
+                        <td>${money(row.gasoline)}</td>
+                        <td>${money(row.staffs_food_allowance)}</td>
                         <td>${money(row.miscellaneous)}</td>
                         <td>${Number(row.commission_percent || 0).toFixed(2)}%</td>
                         <td>${money(row.commission_amount)}</td>
@@ -544,22 +1122,138 @@
             });
         }
 
-        async function generateReport() {
-            const collector_id = collectorSelect.value;
-            const date_from = dateFromInput.value;
-            const date_to = dateToInput.value;
 
-            if (!collector_id || !date_from || !date_to) {
+        const detailConfig = {
+            payments: {
+                render: renderPayments,
+                limitId: "paymentsLimit",
+                prevId: "paymentsPrev",
+                nextId: "paymentsNext",
+                infoId: "paymentsInfo"
+            },
+            balances: {
+                render: renderBalances,
+                limitId: "balancesLimit",
+                prevId: "balancesPrev",
+                nextId: "balancesNext",
+                infoId: "balancesInfo"
+            },
+            item_ranking: {
+                render: renderItemRanking,
+                limitId: "itemRankingLimit",
+                prevId: "itemRankingPrev",
+                nextId: "itemRankingNext",
+                infoId: "itemRankingInfo"
+            },
+            capital: {
+                render: renderCapital,
+                limitId: "capitalLimit",
+                prevId: "capitalPrev",
+                nextId: "capitalNext",
+                infoId: "capitalInfo"
+            },
+            expenses: {
+                render: renderExpenses,
+                limitId: "expensesLimit",
+                prevId: "expensesPrev",
+                nextId: "expensesNext",
+                infoId: "expensesInfo"
+            },
+            remits: {
+                render: renderRemits,
+                limitId: "remitsLimit",
+                prevId: "remitsPrev",
+                nextId: "remitsNext",
+                infoId: "remitsInfo"
+            }
+        };
+
+        function updateDetailPagination(section, pagination) {
+            const cfg = detailConfig[section];
+            if (!cfg) return;
+
+            const state = detailStates[section];
+            state.page = pagination.page || 1;
+            state.limit = pagination.limit || state.limit;
+            state.totalPages = pagination.totalPages || 0;
+
+            const info = document.getElementById(cfg.infoId);
+            const prev = document.getElementById(cfg.prevId);
+            const next = document.getElementById(cfg.nextId);
+            const limitSelect = document.getElementById(cfg.limitId);
+
+            if (info) info.textContent = `Page ${state.page} of ${state.totalPages} | Total: ${pagination.total || 0}`;
+            if (prev) prev.disabled = state.page <= 1;
+            if (next) next.disabled = state.totalPages === 0 || state.page >= state.totalPages;
+            if (limitSelect) limitSelect.value = String(state.limit);
+        }
+
+        function renderInitialDetailSections(data) {
+            renderPayments(data.details.payments || []);
+            renderBalances(data.details.balances || []);
+            renderItemRanking(data.details.item_ranking || []);
+            renderCapital(data.details.capital || []);
+            renderExpenses(data.details.expenses || []);
+            renderRemits(data.details.remits || []);
+
+            const p = data.detail_pagination || {};
+            updateDetailPagination("payments", p.payments || { page: 1, limit: 25, total: 0, totalPages: 0 });
+            updateDetailPagination("balances", p.balances || { page: 1, limit: 25, total: 0, totalPages: 0 });
+            updateDetailPagination("item_ranking", p.item_ranking || { page: 1, limit: 25, total: 0, totalPages: 0 });
+            updateDetailPagination("capital", p.capital || { page: 1, limit: 25, total: 0, totalPages: 0 });
+            updateDetailPagination("expenses", p.expenses || { page: 1, limit: 25, total: 0, totalPages: 0 });
+            updateDetailPagination("remits", p.remits || { page: 1, limit: 25, total: 0, totalPages: 0 });
+        }
+
+        async function loadReportDetail(section, page = 1) {
+            if (!latestReportFilters) return;
+
+            const cfg = detailConfig[section];
+            if (!cfg) return;
+
+            const state = detailStates[section];
+            const params = new URLSearchParams();
+            params.append("collector_id", latestReportFilters.collector_id);
+            params.append("date_from", latestReportFilters.date_from);
+            params.append("date_to", latestReportFilters.date_to);
+            params.append("selected_customer_ids", JSON.stringify(latestReportFilters.selected_customer_ids));
+            params.append("page", page);
+            params.append("limit", state.limit);
+
+            const res = await fetch(`/reports/details/${section}?${params.toString()}`);
+            const data = await res.json();
+
+            if (!res.ok) {
+                alert(data.message || "Failed to load report detail");
+                return;
+            }
+
+            cfg.render(data.rows || []);
+            updateDetailPagination(section, data.pagination || { page, limit: state.limit, total: 0, totalPages: 0 });
+        }
+
+        async function generateReport() {
+            const collectorId = collectorSelect.value;
+            const dateFrom = dateFromInput.value;
+            const dateTo = dateToInput.value;
+            const selectedIds = [...selectedCustomersMap.keys()].map(Number);
+
+            if (!collectorId || !dateFrom || !dateTo) {
                 alert("Please select collector, date from, and date to");
                 return;
             }
 
+            if (selectedIds.length === 0) {
+                alert("Please add at least one customer to the selected batch first");
+                return;
+            }
+
             try {
-                const params = new URLSearchParams({
-                    collector_id,
-                    date_from,
-                    date_to
-                });
+                const params = new URLSearchParams();
+                params.append("collector_id", collectorId);
+                params.append("date_from", dateFrom);
+                params.append("date_to", dateTo);
+                params.append("selected_customer_ids", JSON.stringify(selectedIds));
 
                 const res = await fetch(`/reports?${params.toString()}`);
                 const data = await res.json();
@@ -570,29 +1264,149 @@
                 }
 
                 renderSummary(data);
-                renderPayments(data.details.payments);
-                renderBalances(data.details.balances);
-                renderCapital(data.details.capital);
-                renderExpenses(data.details.expenses);
-                renderRemits(data.details.remits);
-
+                renderInitialDetailSections(data);
+                latestReportData = data;
+                latestReportFilters = data.filters;
+                downloadExcelBtn.disabled = false;
                 reportSection.classList.remove("hidden");
+                window.scrollTo({ top: reportSection.offsetTop - 10, behavior: "smooth" });
             } catch (error) {
                 console.log(error);
                 alert("Could not generate report");
             }
         }
 
-        function setDefaultDates() {
-            const todayDate = today();
-            dateFromInput.value = todayDate;
-            dateToInput.value = todayDate;
+        async function downloadExcelReport() {
+    if (!latestReportData) {
+        alert("Please generate the report first");
+        return;
+    }
+
+    try {
+        const interpretation = [
+            `Batch Scope: ${Number(latestReportData.summary.total_customers || 0)} selected customer(s) only.`,
+            `Business Status: ${latestReportData.summary.business_result_label} | Payments ${money(latestReportData.summary.total_payments_collected)} - Item Capital ${money(latestReportData.summary.total_item_capital)} - Expenses ${money(latestReportData.summary.total_expenses)} = ${money(latestReportData.summary.business_result_amount)}`,
+            `Collector Status: ${latestReportData.summary.collector_result_label} | Variance ${money(latestReportData.summary.collector_result_amount)}`,
+            `Total Customers: ${Number(latestReportData.summary.total_customers || 0)}`,
+            `Total Items Sold: ${Number(latestReportData.summary.total_items_sold || 0)}`,
+            `Most Salable Item: ${latestReportData.summary.most_salable_item ? latestReportData.summary.most_salable_item.item_name : "No data"}`,
+            `Least Salable Item: ${latestReportData.summary.least_salable_item ? latestReportData.summary.least_salable_item.item_name : "No data"}`
+        ];
+
+        const payload = {
+            collector_name: latestReportData.filters.collector_name,
+            date_from: latestReportData.filters.date_from,
+            date_to: latestReportData.filters.date_to,
+            summary: {
+                total_payments_collected: latestReportData.summary.total_payments_collected,
+                total_remaining_balance: latestReportData.summary.total_remaining_balance,
+                total_item_capital: latestReportData.summary.total_item_capital,
+                total_expenses: latestReportData.summary.total_expenses,
+                total_cash_on_hand: latestReportData.summary.total_cash_on_hand,
+                business_result_amount: latestReportData.summary.business_result_amount,
+                collector_result_amount: latestReportData.summary.collector_result_amount,
+                commission_percent: latestReportData.filters.commission_percent,
+                total_customers: latestReportData.summary.total_customers,
+                total_items_sold: latestReportData.summary.total_items_sold
+            },
+            ranking: latestReportData.details.item_ranking || [],
+            interpretation,
+            payments: latestReportData.details.payments || [],
+            selected_customers: [...selectedCustomersMap.values()],
+            filters: latestReportData.filters
+        };
+
+        const res = await fetch("/reports/export-excel", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify(payload)
+        });
+
+        if (!res.ok) {
+            const err = await res.json().catch(() => ({}));
+            alert(err.message || "Failed to export Excel");
+            return;
         }
 
-        generateBtn.addEventListener("click", generateReport);
+        const blob = await res.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `collector_report_${latestReportData.filters.collector_name}_${latestReportData.filters.date_from}_to_${latestReportData.filters.date_to}.xlsx`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        window.URL.revokeObjectURL(url);
+    } catch (error) {
+        console.log(error);
+        alert("Could not export Excel");
+    }
+}
 
-        setDefaultDates();
+        searchBtn.addEventListener("click", () => searchCustomers(1, searchCurrentLimit));
+clearSearchBtn.addEventListener("click", clearSearchFilters);
+addAllBtn.addEventListener("click", addAllSearchResults);
+clearSelectedBtn.addEventListener("click", clearSelectedBatch);
+generateBtn.addEventListener("click", generateReport);
+downloadExcelBtn.addEventListener("click", downloadExcelReport);
+
+searchPageSizeSelect.addEventListener("change", () => {
+    searchCurrentLimit = Number(searchPageSizeSelect.value);
+    searchCustomers(1, searchCurrentLimit);
+});
+
+searchPrevBtn.addEventListener("click", () => {
+    if (searchCurrentPage > 1) {
+        searchCustomers(searchCurrentPage - 1, searchCurrentLimit);
+    }
+});
+
+searchNextBtn.addEventListener("click", () => {
+    if (searchCurrentPage < searchTotalPages) {
+        searchCustomers(searchCurrentPage + 1, searchCurrentLimit);
+    }
+});
+
+
+Object.keys(detailConfig).forEach(section => {
+    const cfg = detailConfig[section];
+    const limitSelect = document.getElementById(cfg.limitId);
+    const prevBtn = document.getElementById(cfg.prevId);
+    const nextBtn = document.getElementById(cfg.nextId);
+
+    if (limitSelect) {
+        limitSelect.addEventListener("change", () => {
+            detailStates[section].limit = Number(limitSelect.value);
+            loadReportDetail(section, 1);
+        });
+    }
+
+    if (prevBtn) {
+        prevBtn.addEventListener("click", () => {
+            if (detailStates[section].page > 1) {
+                loadReportDetail(section, detailStates[section].page - 1);
+            }
+        });
+    }
+
+    if (nextBtn) {
+        nextBtn.addEventListener("click", () => {
+            if (detailStates[section].page < detailStates[section].totalPages) {
+                loadReportDetail(section, detailStates[section].page + 1);
+            }
+        });
+    }
+});
+
+        dateFromInput.value = "2024-01-01";
+        dateToInput.value = today();
+        updateSearchPagination({ page: 0, limit: 25, total: 0, totalPages: 0 });
+
         loadCollectors();
+        renderSearchResults();
+        renderSelectedCustomers();
     </script>
 </body>
 </html>

@@ -17,9 +17,13 @@ const expenseRoutes = require("./routes/expenses");
 const remitRoutes = require("./routes/remits");
 const reportRoutes = require("./routes/reports");
 const authRoutes = require("./routes/auth");
+const dashboardRoutes = require("./routes/dashboard");
+const payablesRoutes = require("./routes/payables");
+const userRoutes = require("./routes/users");
 
 app.use(cors());
-app.use(bodyParser.json());
+app.use(bodyParser.json({ limit: "25mb" }));
+app.use(bodyParser.urlencoded({ extended: true, limit: "25mb" }));
 
 // SESSION
 app.use(session({
@@ -69,6 +73,9 @@ app.use("/new-customer-sale", newCustomerSaleRoutes);
 app.use("/expenses", expenseRoutes);
 app.use("/remits", remitRoutes);
 app.use("/reports", reportRoutes);
+app.use("/dashboard", dashboardRoutes);
+app.use("/payables", payablesRoutes);
+app.use("/users", userRoutes);
 
 // PROTECTED HOME
 app.get("/", (req, res) => {

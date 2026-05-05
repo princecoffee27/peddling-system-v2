@@ -1,0 +1,429 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>User Management</title>
+
+<style>
+body {
+    font-family: Arial, sans-serif;
+    padding: 20px;
+    background: #f5f5f5;
+}
+
+h2, h3 {
+    margin-bottom: 10px;
+}
+
+.card {
+    background: white;
+    padding: 15px;
+    margin-bottom: 20px;
+    border-radius: 8px;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+}
+
+input, select {
+    padding: 7px;
+    margin: 5px;
+}
+
+button {
+    padding: 7px 12px;
+    cursor: pointer;
+    border: none;
+    border-radius: 4px;
+    background: #007bff;
+    color: white;
+}
+
+button:hover {
+    background: #0056b3;
+}
+
+.reset-btn {
+    background: #ff9800;
+}
+
+.reset-btn:hover {
+    background: #e68900;
+}
+
+table {
+    width: 100%;
+    border-collapse: collapse;
+    background: white;
+}
+
+th, td {
+    border: 1px solid #ccc;
+    padding: 8px;
+    vertical-align: top;
+    text-align: left;
+}
+
+th {
+    background: #333;
+    color: white;
+}
+
+.privilege-box label {
+    display: block;
+    margin-bottom: 5px;
+}
+
+.status-active {
+    color: green;
+    font-weight: bold;
+}
+
+.status-inactive {
+    color: red;
+    font-weight: bold;
+}
+
+.back-link {
+    display: inline-block;
+    margin-bottom: 15px;
+}
+</style>
+</head>
+
+<body>
+
+<a class="back-link" href="index.html">← Back to Dashboard</a>
+
+<h2>User Management</h2>
+
+<div class="card">
+    <h3>Create New User</h3>
+
+    <input type="text" id="username" placeholder="Username">
+    <input type="password" id="password" placeholder="Password">
+
+    <select id="role" onchange="applyDefaultPrivileges()">
+        <option value="staff">Staff</option>
+        <option value="admin">Admin</option>
+    </select>
+
+    <div class="privilege-box">
+        <strong>Privileges</strong>
+
+        <label>
+            <input type="checkbox" id="priv_dashboard_money">
+            Can view dashboard money
+        </label>
+
+        <label>
+            <input type="checkbox" id="priv_reports">
+            Can use reports page
+        </label>
+
+        <label>
+            <input type="checkbox" id="priv_manage_users">
+            Can use user management
+        </label>
+    </div>
+
+    <button onclick="createUser()">Create User</button>
+</div>
+
+<div class="card">
+    <h3>All Users</h3>
+
+    <table>
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Username</th>
+                <th>Role</th>
+                <th>Status</th>
+                <th>Privileges</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody id="userTable"></tbody>
+    </table>
+</div>
+
+<script>
+let allUsers = [];
+
+// check admin access
+async function checkAuth() {
+    try {
+        const res = await fetch("/auth/me");
+        const data = await res.json();
+
+        if (!res.ok || !data.user) {
+            alert("Please login first");
+            window.location.href = "login.html";
+            return;
+        }
+
+        if (data.user.role !== "admin") {
+            alert("Admin access only");
+            window.location.href = "index.html";
+            return;
+        }
+    } catch (err) {
+        console.error(err);
+        alert("Login check failed");
+        window.location.href = "login.html";
+    }
+}
+
+// default privilege checkbox behavior when creating user
+function applyDefaultPrivileges() {
+    const role = document.getElementById("role").value;
+
+    const isAdmin = role === "admin";
+
+    document.getElementById("priv_dashboard_money").checked = isAdmin;
+    document.getElementById("priv_reports").checked = isAdmin;
+    document.getElementById("priv_manage_users").checked = isAdmin;
+}
+
+// get create-form privileges
+function getCreatePrivileges() {
+    return {
+        view_dashboard_money: document.getElementById("priv_dashboard_money").checked,
+        view_reports: document.getElementById("priv_reports").checked,
+        manage_users: document.getElementById("priv_manage_users").checked
+    };
+}
+
+// safe privileges fallback
+function normalizePrivileges(privileges, role) {
+    if (!privileges) {
+        return {
+            view_dashboard_money: role === "admin",
+            view_reports: role === "admin",
+            manage_users: role === "admin"
+        };
+    }
+
+    return {
+        view_dashboard_money: !!privileges.view_dashboard_money,
+        view_reports: !!privileges.view_reports,
+        manage_users: !!privileges.manage_users
+    };
+}
+
+// load all users
+async function loadUsers() {
+    try {
+        const res = await fetch("/users");
+        const users = await res.json();
+
+        if (!res.ok) {
+            alert(users.message || "Failed to load users");
+            return;
+        }
+
+        allUsers = users;
+
+        const table = document.getElementById("userTable");
+        table.innerHTML = "";
+
+        users.forEach(user => {
+            const privileges = normalizePrivileges(user.privileges, user.role);
+
+            table.innerHTML += `
+                <tr>
+                    <td>${user.id}</td>
+
+                    <td>${user.username}</td>
+
+                    <td>
+                        <select onchange="updateRole(${user.id}, this.value)">
+                            <option value="staff" ${user.role === "staff" ? "selected" : ""}>Staff</option>
+                            <option value="admin" ${user.role === "admin" ? "selected" : ""}>Admin</option>
+                        </select>
+                    </td>
+
+                    <td>
+                        <select onchange="updateStatus(${user.id}, this.value)">
+                            <option value="1" ${Number(user.is_active) === 1 ? "selected" : ""}>Active</option>
+                            <option value="0" ${Number(user.is_active) === 0 ? "selected" : ""}>Inactive</option>
+                        </select>
+                        <br>
+                        ${Number(user.is_active) === 1
+                            ? '<span class="status-active">Active</span>'
+                            : '<span class="status-inactive">Inactive</span>'}
+                    </td>
+
+                    <td class="privilege-box">
+                        <label>
+                            <input type="checkbox"
+                                ${privileges.view_dashboard_money ? "checked" : ""}
+                                onchange="updatePrivilege(${user.id}, 'view_dashboard_money', this.checked)">
+                            Dashboard Money
+                        </label>
+
+                        <label>
+                            <input type="checkbox"
+                                ${privileges.view_reports ? "checked" : ""}
+                                onchange="updatePrivilege(${user.id}, 'view_reports', this.checked)">
+                            Reports Page
+                        </label>
+
+                        <label>
+                            <input type="checkbox"
+                                ${privileges.manage_users ? "checked" : ""}
+                                onchange="updatePrivilege(${user.id}, 'manage_users', this.checked)">
+                            User Management
+                        </label>
+                    </td>
+
+                    <td>
+                        <button class="reset-btn" onclick="resetPassword(${user.id})">
+                            Reset Password
+                        </button>
+                    </td>
+                </tr>
+            `;
+        });
+    } catch (err) {
+        console.error(err);
+        alert("Error loading users");
+    }
+}
+
+// create user
+async function createUser() {
+    const username = document.getElementById("username").value.trim();
+    const password = document.getElementById("password").value.trim();
+    const role = document.getElementById("role").value;
+    const privileges = getCreatePrivileges();
+
+    if (!username || !password) {
+        alert("Please enter username and password");
+        return;
+    }
+
+    try {
+        const res = await fetch("/users", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                username,
+                password,
+                role,
+                privileges
+            })
+        });
+
+        const data = await res.json();
+        alert(data.message);
+
+        if (res.ok) {
+            document.getElementById("username").value = "";
+            document.getElementById("password").value = "";
+            document.getElementById("role").value = "staff";
+            applyDefaultPrivileges();
+            loadUsers();
+        }
+    } catch (err) {
+        console.error(err);
+        alert("Error creating user");
+    }
+}
+
+// update whole user
+async function saveUser(user) {
+    try {
+        const res = await fetch(`/users/${user.id}`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                role: user.role,
+                is_active: user.is_active,
+                privileges: normalizePrivileges(user.privileges, user.role)
+            })
+        });
+
+        const data = await res.json();
+
+        if (!res.ok) {
+            alert(data.message || "Failed to update user");
+            return;
+        }
+
+        loadUsers();
+    } catch (err) {
+        console.error(err);
+        alert("Error updating user");
+    }
+}
+
+// update role
+function updateRole(id, newRole) {
+    const user = allUsers.find(u => Number(u.id) === Number(id));
+    if (!user) return;
+
+    user.role = newRole;
+
+    if (newRole === "admin") {
+        user.privileges = {
+            view_dashboard_money: true,
+            view_reports: true,
+            manage_users: true
+        };
+    } else {
+        user.privileges = normalizePrivileges(user.privileges, "staff");
+    }
+
+    saveUser(user);
+}
+
+// update active/inactive
+function updateStatus(id, newStatus) {
+    const user = allUsers.find(u => Number(u.id) === Number(id));
+    if (!user) return;
+
+    user.is_active = Number(newStatus);
+    saveUser(user);
+}
+
+// update single privilege checkbox
+function updatePrivilege(id, key, value) {
+    const user = allUsers.find(u => Number(u.id) === Number(id));
+    if (!user) return;
+
+    user.privileges = normalizePrivileges(user.privileges, user.role);
+    user.privileges[key] = value;
+
+    saveUser(user);
+}
+
+// reset password
+async function resetPassword(id) {
+    const newPass = prompt("Enter new password:");
+    if (!newPass) return;
+
+    try {
+        const res = await fetch(`/users/${id}/password`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ password: newPass })
+        });
+
+        const data = await res.json();
+        alert(data.message);
+    } catch (err) {
+        console.error(err);
+        alert("Error resetting password");
+    }
+}
+
+// init
+(async function init() {
+    await checkAuth();
+    applyDefaultPrivileges();
+    await loadUsers();
+})();
+</script>
+
+</body>
+</html>

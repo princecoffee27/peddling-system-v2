@@ -2,6 +2,10 @@ const express = require("express");
 const router = express.Router();
 const db = require("../database/db");
 
+function round2(value) {
+    return Number((Number(value) || 0).toFixed(2));
+}
+
 // Load collectors
 router.get("/collectors", (req, res) => {
     const sql = `
@@ -143,6 +147,9 @@ router.post("/", (req, res) => {
         miscellaneous,
         commission_percent,
         cash_on_hand,
+        negative_deduction,
+        cash_advance_deduction,
+        final_commission_paid,
         notes
     } = req.body;
 
@@ -152,21 +159,35 @@ router.post("/", (req, res) => {
         });
     }
 
-    const gasValue = Number(gas) || 0;
-    const foodValue = Number(food) || 0;
-    const miscValue = Number(miscellaneous) || 0;
-    const commissionPercentValue = Number(commission_percent) || 0;
-    const cashOnHandValue = Number(cash_on_hand) || 0;
+    const gasValue = round2(gas);
+    const foodValue = round2(food);
+    const miscValue = round2(miscellaneous);
+    const commissionPercentValue = round2(commission_percent);
+    const cashOnHandValue = round2(cash_on_hand);
+    const negativeDeductionValue = round2(negative_deduction);
+    const cashAdvanceDeductionValue = round2(cash_advance_deduction);
 
-    const totalSelectedPayments = selected_items.reduce((sum, item) => {
-        return sum + (Number(item.amount) || 0);
-    }, 0);
+    const totalSelectedPayments = round2(
+        selected_items.reduce((sum, item) => {
+            return sum + (Number(item.amount) || 0);
+        }, 0)
+    );
 
-    // NEW FORMULA
-    const grossTotal = totalSelectedPayments - (gasValue + foodValue + miscValue);
-    const commissionAmount = grossTotal * (commissionPercentValue / 100);
-    const netTotal = cashOnHandValue - commissionAmount;
-    const varianceAmount = cashOnHandValue - grossTotal;
+    const totalExpenses = round2(gasValue + foodValue + miscValue);
+    const grossTotal = round2(totalSelectedPayments - totalExpenses);
+    const commissionAmount = round2(grossTotal * (commissionPercentValue / 100));
+    const computedFinalCommissionPaid = round2(
+        Math.max(0, commissionAmount - negativeDeductionValue - cashAdvanceDeductionValue)
+    );
+
+    const finalCommissionPaid = round2(
+        final_commission_paid === undefined || final_commission_paid === null || final_commission_paid === ""
+            ? computedFinalCommissionPaid
+            : final_commission_paid
+    );
+
+    const netTotal = round2(cashOnHandValue - finalCommissionPaid);
+    const varianceAmount = round2(cashOnHandValue - grossTotal);
 
     db.beginTransaction((err) => {
         if (err) {
@@ -190,13 +211,16 @@ router.post("/", (req, res) => {
                 miscellaneous,
                 commission_percent,
                 commission_amount,
+                negative_deduction,
+                cash_advance_deduction,
+                final_commission_paid,
                 gross_total,
                 cash_on_hand,
                 net_total,
                 variance_amount,
                 notes
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `;
 
         db.query(
@@ -214,6 +238,9 @@ router.post("/", (req, res) => {
                 miscValue,
                 commissionPercentValue,
                 commissionAmount,
+                negativeDeductionValue,
+                cashAdvanceDeductionValue,
+                finalCommissionPaid,
                 grossTotal,
                 cashOnHandValue,
                 netTotal,
@@ -238,7 +265,7 @@ router.post("/", (req, res) => {
                     item.customer_id,
                     item.customer_name,
                     item.collector_id,
-                    item.amount,
+                    round2(item.amount),
                     item.payment_date
                 ]);
 
@@ -265,23 +292,57 @@ router.post("/", (req, res) => {
                         });
                     }
 
-                    db.commit((err) => {
-                        if (err) {
+                    const verifySql = `
+                        SELECT IFNULL(SUM(payment_amount), 0) AS detail_total
+                        FROM remit_items
+                        WHERE remit_id = ?
+                    `;
+
+                    db.query(verifySql, [remitId], (verifyErr, verifyRows) => {
+                        if (verifyErr) {
                             return db.rollback(() => {
-                                console.log("REMIT COMMIT ERROR:", err);
+                                console.log("VERIFY REMIT ITEMS ERROR:", verifyErr);
                                 res.status(500).json({
-                                    message: err.sqlMessage || err.message
+                                    message: verifyErr.sqlMessage || verifyErr.message
                                 });
                             });
                         }
 
-                        res.json({
-                            message: "Remit saved successfully",
-                            total_selected_payments: totalSelectedPayments,
-                            commission_amount: commissionAmount,
-                            gross_total: grossTotal,
-                            net_total: netTotal,
-                            variance_amount: varianceAmount
+                        const detailTotal = round2(verifyRows[0]?.detail_total || 0);
+
+                        if (detailTotal !== totalSelectedPayments) {
+                            return db.rollback(() => {
+                                console.log("REMIT TOTAL MISMATCH ON SAVE", {
+                                    remitId,
+                                    totalSelectedPayments,
+                                    detailTotal
+                                });
+                                res.status(500).json({
+                                    message: `Remit not saved because detail total (${detailTotal.toFixed(2)}) does not match summary total (${totalSelectedPayments.toFixed(2)}).`
+                                });
+                            });
+                        }
+
+                        db.commit((err) => {
+                            if (err) {
+                                return db.rollback(() => {
+                                    console.log("REMIT COMMIT ERROR:", err);
+                                    res.status(500).json({
+                                        message: err.sqlMessage || err.message
+                                    });
+                                });
+                            }
+
+                            res.json({
+                                message: "Remit saved successfully",
+                                total_selected_payments: totalSelectedPayments,
+                                commission_amount: commissionAmount,
+                                negative_deduction: negativeDeductionValue,
+                                final_commission_paid: finalCommissionPaid,
+                                gross_total: grossTotal,
+                                net_total: netTotal,
+                                variance_amount: varianceAmount
+                            });
                         });
                     });
                 });
@@ -318,11 +379,21 @@ router.get("/", (req, res) => {
             remits.miscellaneous,
             remits.commission_percent,
             remits.commission_amount,
+            remits.negative_deduction,
+            remits.cash_advance_deduction,
+            remits.final_commission_paid,
             remits.gross_total,
             remits.cash_on_hand,
             remits.net_total,
             remits.variance_amount,
-            remits.notes
+remits.notes,
+EXISTS (
+    SELECT 1
+    FROM collector_negatives cn
+    WHERE cn.source_type = 'remit_shortage'
+    AND cn.source_remit_id = remits.id
+    AND cn.remarks LIKE '%[DEDUCT_WAIVED]%'
+) AS negative_deduction_waived
         FROM remits
         JOIN collectors ON remits.collector_id = collectors.id
         ORDER BY remits.id DESC
@@ -430,79 +501,92 @@ router.delete("/:remitId", (req, res) => {
     });
 });
 
-// Reopen remit for editing
+// Reopen remit for editing with mismatch check
 router.post("/:remitId/reopen-edit", (req, res) => {
     const remitId = req.params.remitId;
 
-    db.beginTransaction((txErr) => {
-        if (txErr) {
-            console.log("REOPEN REMIT TRANSACTION ERROR:", txErr);
+    const getRemitSql = `
+        SELECT
+            id,
+            collector_id,
+            DATE_FORMAT(remit_date, '%Y-%m-%d') AS remit_date,
+            DATE_FORMAT(payment_date_from, '%Y-%m-%d') AS payment_date_from,
+            DATE_FORMAT(payment_date_to, '%Y-%m-%d') AS payment_date_to,
+            customer_id_from,
+            customer_id_to,
+            total_selected_payments,
+            gas,
+            food,
+            miscellaneous,
+            commission_percent,
+            negative_deduction,
+            cash_advance_deduction,
+            final_commission_paid,
+            cash_on_hand,
+            notes
+        FROM remits
+        WHERE id = ?
+    `;
+
+    const getItemsSql = `
+        SELECT
+            ri.payment_id,
+            ri.customer_id,
+            ri.customer_name,
+            ri.collector_id,
+            c.name AS collector_name,
+            ri.payment_amount AS amount,
+            DATE_FORMAT(ri.payment_date, '%Y-%m-%d') AS payment_date
+        FROM remit_items ri
+        LEFT JOIN collectors c ON ri.collector_id = c.id
+        WHERE ri.remit_id = ?
+        ORDER BY ri.id ASC
+    `;
+
+    db.query(getRemitSql, [remitId], (getRemitErr, remitRows) => {
+        if (getRemitErr) {
+            console.log("GET REMIT FOR REOPEN ERROR:", getRemitErr);
             return res.status(500).json({
-                message: txErr.sqlMessage || txErr.message
+                message: getRemitErr.sqlMessage || getRemitErr.message
             });
         }
 
-        const getRemitSql = `
-            SELECT
-                id,
-                collector_id,
-                DATE_FORMAT(remit_date, '%Y-%m-%d') AS remit_date,
-                DATE_FORMAT(payment_date_from, '%Y-%m-%d') AS payment_date_from,
-                DATE_FORMAT(payment_date_to, '%Y-%m-%d') AS payment_date_to,
-                customer_id_from,
-                customer_id_to,
-                gas,
-                food,
-                miscellaneous,
-                commission_percent,
-                cash_on_hand,
-                notes
-            FROM remits
-            WHERE id = ?
-        `;
+        if (remitRows.length === 0) {
+            return res.status(404).json({
+                message: "Remit not found"
+            });
+        }
 
-        db.query(getRemitSql, [remitId], (getRemitErr, remitRows) => {
-            if (getRemitErr) {
-                return db.rollback(() => {
-                    console.log("GET REMIT FOR REOPEN ERROR:", getRemitErr);
-                    res.status(500).json({
-                        message: getRemitErr.sqlMessage || getRemitErr.message
-                    });
+        const remit = remitRows[0];
+
+        db.query(getItemsSql, [remitId], (getItemsErr, itemRows) => {
+            if (getItemsErr) {
+                console.log("GET REMIT ITEMS FOR REOPEN ERROR:", getItemsErr);
+                return res.status(500).json({
+                    message: getItemsErr.sqlMessage || getItemsErr.message
                 });
             }
 
-            if (remitRows.length === 0) {
-                return db.rollback(() => {
-                    res.status(404).json({
-                        message: "Remit not found"
-                    });
+            const savedTotal = round2(remit.total_selected_payments);
+            const detailTotal = round2(
+                itemRows.reduce((sum, row) => sum + (Number(row.amount) || 0), 0)
+            );
+
+            if (savedTotal !== detailTotal) {
+                return res.status(409).json({
+                    message: "Mismatch detected. Edit cancelled for safety.",
+                    mismatch: true,
+                    saved_total: savedTotal,
+                    detail_total: detailTotal,
+                    difference: round2(savedTotal - detailTotal)
                 });
             }
 
-            const remit = remitRows[0];
-
-            const getItemsSql = `
-                SELECT
-                    ri.payment_id,
-                    ri.customer_id,
-                    ri.customer_name,
-                    ri.collector_id,
-                    c.name AS collector_name,
-                    ri.payment_amount AS amount,
-                    DATE_FORMAT(ri.payment_date, '%Y-%m-%d') AS payment_date
-                FROM remit_items ri
-                LEFT JOIN collectors c ON ri.collector_id = c.id
-                WHERE ri.remit_id = ?
-                ORDER BY ri.id ASC
-            `;
-
-            db.query(getItemsSql, [remitId], (getItemsErr, itemRows) => {
-                if (getItemsErr) {
-                    return db.rollback(() => {
-                        console.log("GET REMIT ITEMS FOR REOPEN ERROR:", getItemsErr);
-                        res.status(500).json({
-                            message: getItemsErr.sqlMessage || getItemsErr.message
-                        });
+            db.beginTransaction((txErr) => {
+                if (txErr) {
+                    console.log("REOPEN REMIT TRANSACTION ERROR:", txErr);
+                    return res.status(500).json({
+                        message: txErr.sqlMessage || txErr.message
                     });
                 }
 
@@ -555,6 +639,128 @@ router.post("/:remitId/reopen-edit", (req, res) => {
                     });
                 });
             });
+        });
+    });
+});
+
+// ================= DEDUCT NEGATIVE =================
+router.post("/:remitId/deduct-negative", (req, res) => {
+    const remitId = req.params.remitId;
+
+    const sql = `
+        SELECT commission_amount, variance_amount, cash_on_hand
+        FROM remits
+        WHERE id = ?
+    `;
+
+    db.query(sql, [remitId], (err, rows) => {
+        if (err) return res.status(500).json({ message: err.message });
+        if (rows.length === 0) return res.status(404).json({ message: "Remit not found" });
+
+        const r = rows[0];
+
+        if (Number(r.variance_amount) >= 0) {
+            return res.status(400).json({ message: "No negative to deduct" });
+        }
+
+        const deduction = Math.abs(Number(r.variance_amount));
+        const finalCommission = Math.max(0, Number(r.commission_amount) - deduction);
+        const netTotal = Number(r.cash_on_hand) - finalCommission;
+
+        const updateSql = `
+            UPDATE remits
+            SET
+                negative_deduction = ?,
+                final_commission_paid = ?,
+                net_total = ?
+            WHERE id = ?
+        `;
+
+        db.query(updateSql, [deduction, finalCommission, netTotal, remitId], (err) => {
+            if (err) return res.status(500).json({ message: err.message });
+
+            res.json({ message: "Deduction applied successfully" });
+        });
+    });
+});
+
+// ================= WAIVE NEGATIVE DEDUCTION BUTTON =================
+router.post("/:remitId/waive-negative-deduction", (req, res) => {
+    const remitId = req.params.remitId;
+
+    const getRemitSql = `
+        SELECT id, collector_id, remit_date, variance_amount
+        FROM remits
+        WHERE id = ?
+    `;
+
+    db.query(getRemitSql, [remitId], (err, rows) => {
+        if (err) return res.status(500).json({ message: err.sqlMessage || err.message });
+
+        if (rows.length === 0) {
+            return res.status(404).json({ message: "Remit not found" });
+        }
+
+        const remit = rows[0];
+
+        if (Number(remit.variance_amount) >= 0) {
+            return res.status(400).json({ message: "No negative to waive" });
+        }
+
+        const updateSql = `
+            UPDATE collector_negatives
+            SET remarks = CONCAT(IFNULL(remarks, ''), ' [DEDUCT_WAIVED]')
+            WHERE source_type = 'remit_shortage'
+            AND source_remit_id = ?
+        `;
+
+        db.query(updateSql, [remitId], (updateErr, updateResult) => {
+            if (updateErr) {
+                return res.status(500).json({ message: updateErr.sqlMessage || updateErr.message });
+            }
+
+            if (updateResult.affectedRows > 0) {
+                return res.json({
+                    message: "Deduct button waived. Negative will remain in Collector Payables for manual recording."
+                });
+            }
+
+            const insertSql = `
+                INSERT INTO collector_negatives (
+                    collector_id,
+                    negative_date,
+                    amount,
+                    remaining_amount,
+                    source_type,
+                    source_remit_id,
+                    status,
+                    remarks
+                )
+                VALUES (?, ?, ?, ?, 'remit_shortage', ?, 'open', ?)
+            `;
+
+            const amount = Math.abs(Number(remit.variance_amount));
+
+            db.query(
+                insertSql,
+                [
+                    remit.collector_id,
+                    remit.remit_date,
+                    amount,
+                    amount,
+                    remitId,
+                    `Auto negative from remit #${remitId} [DEDUCT_WAIVED]`
+                ],
+                (insertErr) => {
+                    if (insertErr) {
+                        return res.status(500).json({ message: insertErr.sqlMessage || insertErr.message });
+                    }
+
+                    res.json({
+                        message: "Deduct button waived. Negative will remain in Collector Payables for manual recording."
+                    });
+                }
+            );
         });
     });
 });

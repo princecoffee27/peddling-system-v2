@@ -1,0 +1,973 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Collector Payables</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background: #f7f7f7;
+        }
+
+        h1, h2, h3 {
+            margin-bottom: 10px;
+        }
+
+        .card {
+            background: white;
+            border: 1px solid #ddd;
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+
+        .top-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 12px;
+            align-items: end;
+        }
+
+        label {
+            display: block;
+            font-weight: bold;
+            margin-bottom: 6px;
+        }
+
+        input, select, textarea {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #bbb;
+            border-radius: 6px;
+            box-sizing: border-box;
+            font-size: 15px;
+        }
+
+        button {
+            padding: 10px 16px;
+            border: none;
+            border-radius: 8px;
+            background: #2563eb;
+            color: white;
+            cursor: pointer;
+        }
+
+        button:hover {
+            background: #1d4ed8;
+        }
+
+        button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        .secondary-btn {
+            background: #64748b;
+        }
+
+        .secondary-btn:hover {
+            background: #475569;
+        }
+
+        .success-btn {
+            background: #16a34a;
+        }
+
+        .success-btn:hover {
+            background: #15803d;
+        }
+
+        .table-wrap {
+            max-height: 450px;
+            overflow: auto;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            min-width: 1200px;
+        }
+
+        th, td {
+            padding: 10px;
+            border-bottom: 1px solid #ddd;
+            text-align: left;
+            white-space: nowrap;
+        }
+
+        th {
+            background: #f1f5f9;
+            position: sticky;
+            top: 0;
+        }
+
+        .summary-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 15px;
+        }
+
+        .summary-box {
+            background: #f3f4f6;
+            border-radius: 10px;
+            padding: 15px;
+        }
+
+        .summary-box h3 {
+            margin-top: 0;
+            margin-bottom: 8px;
+        }
+
+        .summary-box p {
+            margin: 6px 0;
+            font-weight: bold;
+        }
+
+        .muted {
+            color: #666;
+            font-size: 13px;
+        }
+
+        .table-toolbar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 12px;
+            margin-bottom: 10px;
+        }
+
+        .rows-control {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .rows-control label {
+            margin-bottom: 0;
+        }
+
+        .rows-control select {
+            width: auto;
+            min-width: 80px;
+        }
+
+        .pagination-box {
+            margin-top: 12px;
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        @media (max-width: 1100px) {
+            .top-grid,
+            .summary-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <h1>Collector Payables</h1>
+    <p><a href="/">Back to Home</a></p>
+
+    <div class="card">
+        <h2>Filters</h2>
+        <div class="top-grid">
+            <div>
+                <label for="collectorFilter">Collector</label>
+                <select id="collectorFilter">
+                    <option value="">All Collectors</option>
+                </select>
+            </div>
+
+            <div>
+                <label>&nbsp;</label>
+                <button id="applyFilterBtn" type="button">Apply Filter</button>
+            </div>
+
+            <div>
+                <label>&nbsp;</label>
+                <button id="clearFilterBtn" type="button" class="secondary-btn">Clear Filter</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>Add Cash Advance</h2>
+
+        <div class="top-grid">
+            <div>
+                <label for="cashAdvanceCollector">Collector</label>
+                <select id="cashAdvanceCollector">
+                    <option value="">Select Collector</option>
+                </select>
+            </div>
+
+            <div>
+                <label for="cashAdvanceDate">Advance Date</label>
+                <input type="date" id="cashAdvanceDate">
+            </div>
+
+            <div>
+                <label for="cashAdvanceAmount">Amount</label>
+                <input type="number" id="cashAdvanceAmount" step="0.01" min="0">
+            </div>
+        </div>
+
+        <div style="margin-top: 12px;">
+            <label for="cashAdvanceRemarks">Remarks</label>
+            <textarea id="cashAdvanceRemarks" rows="3" placeholder="Optional remarks"></textarea>
+        </div>
+
+        <div style="margin-top: 15px;">
+            <button id="saveCashAdvanceBtn" type="button" class="success-btn">Save Cash Advance</button>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>Record Settlement Payment</h2>
+
+        <div class="top-grid">
+            <div>
+                <label for="paymentCollector">Collector</label>
+                <select id="paymentCollector">
+                    <option value="">Select Collector</option>
+                </select>
+            </div>
+
+            <div>
+                <label for="paymentDate">Payment Date</label>
+                <input type="date" id="paymentDate">
+            </div>
+
+            <div>
+                <label for="paymentAmount">Amount</label>
+                <input type="number" id="paymentAmount" step="0.01" min="0">
+            </div>
+        </div>
+
+        <div class="top-grid" style="margin-top: 12px;">
+            <div>
+                <label for="paymentTarget">Apply To</label>
+                <select id="paymentTarget">
+                    <option value="negative">Open Negatives</option>
+                    <option value="cash_advance">Open Cash Advances</option>
+                </select>
+            </div>
+
+            <div style="grid-column: span 2;">
+                <label for="paymentRemarks">Remarks</label>
+                <textarea id="paymentRemarks" rows="3" placeholder="Optional remarks"></textarea>
+            </div>
+        </div>
+
+        <div style="margin-top: 15px;">
+            <button id="savePaymentBtn" type="button" class="success-btn">Record Payment</button>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>Overall Summary</h2>
+        <div class="summary-grid">
+            <div class="summary-box">
+                <h3>Total Open Negatives</h3>
+                <p>₱<span id="overallNegatives">0.00</span></p>
+            </div>
+
+            <div class="summary-box">
+                <h3>Total Open Cash Advances</h3>
+                <p>₱<span id="overallAdvances">0.00</span></p>
+            </div>
+
+            <div class="summary-box">
+                <h3>Total Collector Payables</h3>
+                <p>₱<span id="overallPayables">0.00</span></p>
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>Collector Payable Summary</h2>
+        <p class="muted">Combined balances per collector.</p>
+
+        <div class="table-toolbar">
+            <div class="rows-control">
+                <label for="summaryLimit">Rows per page</label>
+                <select id="summaryLimit">
+                    <option value="25">25</option>
+                    <option value="50">50</option>
+                    <option value="100">100</option>
+                </select>
+            </div>
+            <span id="summaryInfo" class="muted">Page 1 of 1 | Total: 0</span>
+        </div>
+
+        <div class="table-wrap">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Collector ID</th>
+                        <th>Collector Name</th>
+                        <th>Commission %</th>
+                        <th>Open Negatives</th>
+                        <th>Open Cash Advances</th>
+                        <th>Total Payable</th>
+                    </tr>
+                </thead>
+                <tbody id="summaryBody"></tbody>
+            </table>
+        </div>
+
+        <div class="pagination-box">
+            <button id="summaryPrev" type="button" class="secondary-btn">Previous</button>
+            <button id="summaryNext" type="button" class="secondary-btn">Next</button>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>Open Negatives</h2>
+        <p class="muted">Negatives not yet fully settled.</p>
+
+        <div class="table-toolbar">
+            <div class="rows-control">
+                <label for="negativesLimit">Rows per page</label>
+                <select id="negativesLimit">
+                    <option value="25">25</option>
+                    <option value="50">50</option>
+                    <option value="100">100</option>
+                </select>
+            </div>
+            <span id="negativesInfo" class="muted">Page 1 of 1 | Total: 0</span>
+        </div>
+
+        <div class="table-wrap">
+            <table>
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Collector</th>
+                        <th>Negative Date</th>
+                        <th>Amount</th>
+                        <th>Remaining</th>
+                        <th>Source Type</th>
+                        <th>Source Remit ID</th>
+                        <th>Status</th>
+                        <th>Remarks</th>
+                        <th>Created At</th>
+                    </tr>
+                </thead>
+                <tbody id="negativesBody"></tbody>
+            </table>
+        </div>
+
+        <div class="pagination-box">
+            <button id="negativesPrev" type="button" class="secondary-btn">Previous</button>
+            <button id="negativesNext" type="button" class="secondary-btn">Next</button>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>Open Cash Advances</h2>
+        <p class="muted">Cash advances not yet fully settled.</p>
+
+        <div class="table-toolbar">
+            <div class="rows-control">
+                <label for="advancesLimit">Rows per page</label>
+                <select id="advancesLimit">
+                    <option value="25">25</option>
+                    <option value="50">50</option>
+                    <option value="100">100</option>
+                </select>
+            </div>
+            <span id="advancesInfo" class="muted">Page 1 of 1 | Total: 0</span>
+        </div>
+
+        <div class="table-wrap">
+            <table>
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Collector</th>
+                        <th>Advance Date</th>
+                        <th>Amount</th>
+                        <th>Remaining</th>
+                        <th>Status</th>
+                        <th>Remarks</th>
+                        <th>Created At</th>
+                    </tr>
+                </thead>
+                <tbody id="advancesBody"></tbody>
+            </table>
+        </div>
+
+        <div class="pagination-box">
+            <button id="advancesPrev" type="button" class="secondary-btn">Previous</button>
+            <button id="advancesNext" type="button" class="secondary-btn">Next</button>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>Deduction History</h2>
+        <p class="muted">All deductions already applied from remits.</p>
+
+        <div class="table-toolbar">
+            <div class="rows-control">
+                <label for="deductionsLimit">Rows per page</label>
+                <select id="deductionsLimit">
+                    <option value="25">25</option>
+                    <option value="50">50</option>
+                    <option value="100">100</option>
+                </select>
+            </div>
+            <span id="deductionsInfo" class="muted">Page 1 of 1 | Total: 0</span>
+        </div>
+
+        <div class="table-wrap">
+            <table>
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Remit ID</th>
+                        <th>Collector</th>
+                        <th>Type</th>
+                        <th>Reference ID</th>
+                        <th>Deducted Amount</th>
+                        <th>Created At</th>
+                    </tr>
+                </thead>
+                <tbody id="deductionsBody"></tbody>
+            </table>
+        </div>
+
+        <div class="pagination-box">
+            <button id="deductionsPrev" type="button" class="secondary-btn">Previous</button>
+            <button id="deductionsNext" type="button" class="secondary-btn">Next</button>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>Settlement Payment History</h2>
+        <p class="muted">Manual payments recorded by collectors toward open balances.</p>
+
+        <div class="table-toolbar">
+            <div class="rows-control">
+                <label for="paymentsLimit">Rows per page</label>
+                <select id="paymentsLimit">
+                    <option value="25">25</option>
+                    <option value="50">50</option>
+                    <option value="100">100</option>
+                </select>
+            </div>
+            <span id="paymentsInfo" class="muted">Page 1 of 1 | Total: 0</span>
+        </div>
+
+        <div class="table-wrap">
+            <table>
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Collector</th>
+                        <th>Payment Date</th>
+                        <th>Amount</th>
+                        <th>Target</th>
+                        <th>Remarks</th>
+                        <th>Created At</th>
+                    </tr>
+                </thead>
+                <tbody id="paymentsBody"></tbody>
+            </table>
+        </div>
+
+        <div class="pagination-box">
+            <button id="paymentsPrev" type="button" class="secondary-btn">Previous</button>
+            <button id="paymentsNext" type="button" class="secondary-btn">Next</button>
+        </div>
+    </div>
+
+    <script>
+        const collectorFilter = document.getElementById("collectorFilter");
+        const summaryBody = document.getElementById("summaryBody");
+        const negativesBody = document.getElementById("negativesBody");
+        const advancesBody = document.getElementById("advancesBody");
+        const deductionsBody = document.getElementById("deductionsBody");
+        const paymentsBody = document.getElementById("paymentsBody");
+
+        const overallNegatives = document.getElementById("overallNegatives");
+        const overallAdvances = document.getElementById("overallAdvances");
+        const overallPayables = document.getElementById("overallPayables");
+
+        const cashAdvanceCollector = document.getElementById("cashAdvanceCollector");
+        const cashAdvanceDate = document.getElementById("cashAdvanceDate");
+        const cashAdvanceAmount = document.getElementById("cashAdvanceAmount");
+        const cashAdvanceRemarks = document.getElementById("cashAdvanceRemarks");
+        const saveCashAdvanceBtn = document.getElementById("saveCashAdvanceBtn");
+
+        const paymentCollector = document.getElementById("paymentCollector");
+        const paymentDate = document.getElementById("paymentDate");
+        const paymentAmount = document.getElementById("paymentAmount");
+        const paymentTarget = document.getElementById("paymentTarget");
+        const paymentRemarks = document.getElementById("paymentRemarks");
+        const savePaymentBtn = document.getElementById("savePaymentBtn");
+
+        const tableState = {
+            summary: { page: 1, limit: 25, totalPages: 0 },
+            negatives: { page: 1, limit: 25, totalPages: 0 },
+            advances: { page: 1, limit: 25, totalPages: 0 },
+            deductions: { page: 1, limit: 25, totalPages: 0 },
+            payments: { page: 1, limit: 25, totalPages: 0 }
+        };
+
+        function money(value) {
+            return Number(value || 0).toFixed(2);
+        }
+
+        function setTodayDefaults() {
+            const today = new Date().toISOString().split("T")[0];
+            cashAdvanceDate.value = today;
+            paymentDate.value = today;
+        }
+
+        function buildQuery(tableKey) {
+            const state = tableState[tableKey];
+            const params = new URLSearchParams();
+            params.append("page", state.page);
+            params.append("limit", state.limit);
+
+            if (collectorFilter.value) {
+                params.append("collector_id", collectorFilter.value);
+            }
+
+            return `?${params.toString()}`;
+        }
+
+        function updatePagination(tableKey, pagination) {
+            const state = tableState[tableKey];
+            state.page = pagination.page || 1;
+            state.limit = pagination.limit || state.limit;
+            state.totalPages = pagination.totalPages || 0;
+
+            const infoEl = document.getElementById(`${tableKey}Info`);
+            const prevBtn = document.getElementById(`${tableKey}Prev`);
+            const nextBtn = document.getElementById(`${tableKey}Next`);
+            const limitSelect = document.getElementById(`${tableKey}Limit`);
+
+            if (infoEl) {
+                infoEl.textContent = `Page ${state.page} of ${state.totalPages} | Total: ${pagination.total || 0}`;
+            }
+
+            if (prevBtn) {
+                prevBtn.disabled = state.page <= 1;
+            }
+
+            if (nextBtn) {
+                nextBtn.disabled = state.totalPages === 0 || state.page >= state.totalPages;
+            }
+
+            if (limitSelect) {
+                limitSelect.value = String(state.limit);
+            }
+        }
+
+        function setupPagination(tableKey, loadFunction) {
+            const limitSelect = document.getElementById(`${tableKey}Limit`);
+            const prevBtn = document.getElementById(`${tableKey}Prev`);
+            const nextBtn = document.getElementById(`${tableKey}Next`);
+
+            limitSelect.addEventListener("change", async () => {
+                tableState[tableKey].limit = Number(limitSelect.value);
+                tableState[tableKey].page = 1;
+                await loadFunction();
+            });
+
+            prevBtn.addEventListener("click", async () => {
+                if (tableState[tableKey].page > 1) {
+                    tableState[tableKey].page -= 1;
+                    await loadFunction();
+                }
+            });
+
+            nextBtn.addEventListener("click", async () => {
+                if (tableState[tableKey].page < tableState[tableKey].totalPages) {
+                    tableState[tableKey].page += 1;
+                    await loadFunction();
+                }
+            });
+        }
+
+        function resetPages() {
+            Object.keys(tableState).forEach(key => {
+                tableState[key].page = 1;
+            });
+        }
+
+        async function loadCollectors() {
+            const res = await fetch("/remits/collectors");
+            const data = await res.json();
+
+            if (!res.ok) {
+                alert(data.message || "Failed to load collectors");
+                return;
+            }
+
+            collectorFilter.innerHTML = `<option value="">All Collectors</option>`;
+            cashAdvanceCollector.innerHTML = `<option value="">Select Collector</option>`;
+            paymentCollector.innerHTML = `<option value="">Select Collector</option>`;
+
+            data.forEach(collector => {
+                const option = `
+                    <option value="${collector.id}">
+                        ${collector.id} - ${collector.name}
+                    </option>
+                `;
+
+                collectorFilter.innerHTML += option;
+                cashAdvanceCollector.innerHTML += option;
+                paymentCollector.innerHTML += option;
+            });
+        }
+
+        async function loadSummary() {
+            const res = await fetch(`/payables/summary${buildQuery("summary")}`);
+            const data = await res.json();
+
+            if (!res.ok) {
+                alert(data.message || "Failed to load payable summary");
+                return;
+            }
+
+            const rows = data.rows || [];
+            summaryBody.innerHTML = "";
+
+            if (rows.length === 0) {
+                summaryBody.innerHTML = `<tr><td colspan="6">No payable summary found.</td></tr>`;
+            } else {
+                rows.forEach(row => {
+                    summaryBody.innerHTML += `
+                        <tr>
+                            <td>${row.collector_id}</td>
+                            <td>${row.collector_name}</td>
+                            <td>${money(row.commission_percent)}</td>
+                            <td>${money(row.total_open_negatives)}</td>
+                            <td>${money(row.total_open_advances)}</td>
+                            <td>${money(row.total_payable)}</td>
+                        </tr>
+                    `;
+                });
+            }
+
+            const totals = data.totals || {};
+            overallNegatives.textContent = money(totals.total_open_negatives);
+            overallAdvances.textContent = money(totals.total_open_advances);
+            overallPayables.textContent = money(totals.total_payable);
+
+            updatePagination("summary", data.pagination || { page: 1, totalPages: 0, total: 0, limit: tableState.summary.limit });
+        }
+
+        async function loadNegatives() {
+            const res = await fetch(`/payables/negatives${buildQuery("negatives")}`);
+            const data = await res.json();
+
+            if (!res.ok) {
+                alert(data.message || "Failed to load negatives");
+                return;
+            }
+
+            const rows = data.rows || [];
+            negativesBody.innerHTML = "";
+
+            if (rows.length === 0) {
+                negativesBody.innerHTML = `<tr><td colspan="10">No open negatives found.</td></tr>`;
+            } else {
+                rows.forEach(row => {
+                    negativesBody.innerHTML += `
+                        <tr>
+                            <td>${row.id}</td>
+                            <td>${row.collector_name}</td>
+                            <td>${row.negative_date}</td>
+                            <td>${money(row.amount)}</td>
+                            <td>${money(row.remaining_amount)}</td>
+                            <td>${row.source_type}</td>
+                            <td>${row.source_remit_id || ""}</td>
+                            <td>${row.status}</td>
+                            <td>${row.remarks || ""}</td>
+                            <td>${row.created_at}</td>
+                        </tr>
+                    `;
+                });
+            }
+
+            updatePagination("negatives", data.pagination || { page: 1, totalPages: 0, total: 0, limit: tableState.negatives.limit });
+        }
+
+        async function loadCashAdvances() {
+            const res = await fetch(`/payables/cash-advances${buildQuery("advances")}`);
+            const data = await res.json();
+
+            if (!res.ok) {
+                alert(data.message || "Failed to load cash advances");
+                return;
+            }
+
+            const rows = data.rows || [];
+            advancesBody.innerHTML = "";
+
+            if (rows.length === 0) {
+                advancesBody.innerHTML = `<tr><td colspan="8">No open cash advances found.</td></tr>`;
+            } else {
+                rows.forEach(row => {
+                    advancesBody.innerHTML += `
+                        <tr>
+                            <td>${row.id}</td>
+                            <td>${row.collector_name}</td>
+                            <td>${row.advance_date}</td>
+                            <td>${money(row.amount)}</td>
+                            <td>${money(row.remaining_amount)}</td>
+                            <td>${row.status}</td>
+                            <td>${row.remarks || ""}</td>
+                            <td>${row.created_at}</td>
+                        </tr>
+                    `;
+                });
+            }
+
+            updatePagination("advances", data.pagination || { page: 1, totalPages: 0, total: 0, limit: tableState.advances.limit });
+        }
+
+        async function loadDeductions() {
+            const res = await fetch(`/payables/deductions${buildQuery("deductions")}`);
+            const data = await res.json();
+
+            if (!res.ok) {
+                alert(data.message || "Failed to load deductions");
+                return;
+            }
+
+            const rows = data.rows || [];
+            deductionsBody.innerHTML = "";
+
+            if (rows.length === 0) {
+                deductionsBody.innerHTML = `<tr><td colspan="7">No deduction history found.</td></tr>`;
+            } else {
+                rows.forEach(row => {
+                    deductionsBody.innerHTML += `
+                        <tr>
+                            <td>${row.id}</td>
+                            <td>${row.remit_id}</td>
+                            <td>${row.collector_name}</td>
+                            <td>${row.deduction_type}</td>
+                            <td>${row.reference_id}</td>
+                            <td>${money(row.deducted_amount)}</td>
+                            <td>${row.created_at}</td>
+                        </tr>
+                    `;
+                });
+            }
+
+            updatePagination("deductions", data.pagination || { page: 1, totalPages: 0, total: 0, limit: tableState.deductions.limit });
+        }
+
+        async function loadPayments() {
+            const res = await fetch(`/payables/payments${buildQuery("payments")}`);
+            const data = await res.json();
+
+            if (!res.ok) {
+                alert(data.message || "Failed to load settlement payments");
+                return;
+            }
+
+            const rows = data.rows || [];
+            paymentsBody.innerHTML = "";
+
+            if (rows.length === 0) {
+                paymentsBody.innerHTML = `<tr><td colspan="7">No settlement payment history found.</td></tr>`;
+            } else {
+                rows.forEach(row => {
+                    paymentsBody.innerHTML += `
+                        <tr>
+                            <td>${row.id}</td>
+                            <td>${row.collector_name}</td>
+                            <td>${row.payment_date}</td>
+                            <td>${money(row.amount)}</td>
+                            <td>${row.payment_target}</td>
+                            <td>${row.remarks || ""}</td>
+                            <td>${row.created_at}</td>
+                        </tr>
+                    `;
+                });
+            }
+
+            updatePagination("payments", data.pagination || { page: 1, totalPages: 0, total: 0, limit: tableState.payments.limit });
+        }
+
+        async function saveCashAdvance() {
+            const collectorId = cashAdvanceCollector.value;
+            const advanceDate = cashAdvanceDate.value;
+            const amount = Number(cashAdvanceAmount.value || 0);
+            const remarks = cashAdvanceRemarks.value.trim();
+
+            if (!collectorId) {
+                alert("Please select a collector.");
+                return;
+            }
+
+            if (!advanceDate) {
+                alert("Please select an advance date.");
+                return;
+            }
+
+            if (amount <= 0) {
+                alert("Please enter a valid cash advance amount.");
+                return;
+            }
+
+            const confirmed = confirm(
+                `Confirm cash advance:\n\n` +
+                `Collector ID: ${collectorId}\n` +
+                `Advance Date: ${advanceDate}\n` +
+                `Amount: ₱${money(amount)}\n` +
+                `Remarks: ${remarks || "-"}\n\n` +
+                `Continue saving?`
+            );
+
+            if (!confirmed) return;
+
+            const res = await fetch("/payables/cash-advances", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({
+                    collector_id: collectorId,
+                    advance_date: advanceDate,
+                    amount: amount,
+                    remarks: remarks
+                })
+            });
+
+            const data = await res.json();
+
+            if (!res.ok) {
+                alert(data.message || "Failed to save cash advance");
+                return;
+            }
+
+            alert(data.message || "Cash advance created successfully");
+
+            cashAdvanceCollector.value = "";
+            cashAdvanceAmount.value = "";
+            cashAdvanceRemarks.value = "";
+            setTodayDefaults();
+            resetPages();
+
+            await loadAllData();
+        }
+
+        async function savePayment() {
+            const collectorId = paymentCollector.value;
+            const payDate = paymentDate.value;
+            const amount = Number(paymentAmount.value || 0);
+            const target = paymentTarget.value;
+            const remarks = paymentRemarks.value.trim();
+
+            if (!collectorId) {
+                alert("Please select a collector.");
+                return;
+            }
+
+            if (!payDate) {
+                alert("Please select a payment date.");
+                return;
+            }
+
+            if (amount <= 0) {
+                alert("Please enter a valid payment amount.");
+                return;
+            }
+
+            const targetLabel = target === "negative" ? "Open Negatives" : "Open Cash Advances";
+
+            const confirmed = confirm(
+                `Confirm settlement payment:\n\n` +
+                `Collector ID: ${collectorId}\n` +
+                `Payment Date: ${payDate}\n` +
+                `Amount: ₱${money(amount)}\n` +
+                `Apply To: ${targetLabel}\n` +
+                `Remarks: ${remarks || "-"}\n\n` +
+                `Continue saving?`
+            );
+
+            if (!confirmed) return;
+
+            const res = await fetch("/payables/payments", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({
+                    collector_id: collectorId,
+                    payment_date: payDate,
+                    amount: amount,
+                    payment_target: target,
+                    remarks: remarks
+                })
+            });
+
+            const data = await res.json();
+
+            if (!res.ok) {
+                alert(data.message || "Failed to record payment");
+                return;
+            }
+
+            alert(data.message || "Collector payment recorded successfully");
+
+            paymentCollector.value = "";
+            paymentAmount.value = "";
+            paymentTarget.value = "negative";
+            paymentRemarks.value = "";
+            setTodayDefaults();
+            resetPages();
+
+            await loadAllData();
+        }
+
+        async function loadAllData() {
+            await loadSummary();
+            await loadNegatives();
+            await loadCashAdvances();
+            await loadDeductions();
+            await loadPayments();
+        }
+
+        document.getElementById("applyFilterBtn").addEventListener("click", async () => {
+            resetPages();
+            await loadAllData();
+        });
+
+        document.getElementById("clearFilterBtn").addEventListener("click", async () => {
+            collectorFilter.value = "";
+            resetPages();
+            await loadAllData();
+        });
+
+        saveCashAdvanceBtn.addEventListener("click", saveCashAdvance);
+        savePaymentBtn.addEventListener("click", savePayment);
+
+        setupPagination("summary", loadSummary);
+        setupPagination("negatives", loadNegatives);
+        setupPagination("advances", loadCashAdvances);
+        setupPagination("deductions", loadDeductions);
+        setupPagination("payments", loadPayments);
+
+        setTodayDefaults();
+        loadCollectors();
+        loadAllData();
+    </script>
+</body>
+</html>

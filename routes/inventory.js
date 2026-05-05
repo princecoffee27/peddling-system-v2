@@ -2,26 +2,38 @@ const express = require("express");
 const router = express.Router();
 const db = require("../database/db");
 
-// Get inventory with pagination
+// Get inventory with pagination + search
 router.get("/", (req, res) => {
     const page = parseInt(req.query.page, 10) || 1;
     const limit = parseInt(req.query.limit, 10) || 50;
     const safeLimit = [50, 100].includes(limit) ? limit : 50;
     const offset = (page - 1) * safeLimit;
 
+    const search = (req.query.search || "").trim();
+
+    let whereSql = "";
+    let params = [];
+
+    if (search !== "") {
+        whereSql = "WHERE item_name LIKE ?";
+        params.push(`%${search}%`);
+    }
+
     const countSql = `
         SELECT COUNT(*) AS total
         FROM inventory
+        ${whereSql}
     `;
 
     const dataSql = `
         SELECT id, item_name, capital_price, selling_price, quantity, is_active
         FROM inventory
+        ${whereSql}
         ORDER BY id ASC
         LIMIT ? OFFSET ?
     `;
 
-    db.query(countSql, (countErr, countResult) => {
+    db.query(countSql, params, (countErr, countResult) => {
         if (countErr) {
             console.log("COUNT INVENTORY ERROR:", countErr);
             return res.status(500).json({
@@ -32,24 +44,28 @@ router.get("/", (req, res) => {
         const total = countResult[0]?.total || 0;
         const totalPages = total > 0 ? Math.ceil(total / safeLimit) : 0;
 
-        db.query(dataSql, [safeLimit, offset], (err, result) => {
-            if (err) {
-                console.log("LOAD INVENTORY ERROR:", err);
-                return res.status(500).json({
-                    message: err.sqlMessage || err.message
+        db.query(
+            dataSql,
+            [...params, safeLimit, offset],
+            (err, result) => {
+                if (err) {
+                    console.log("LOAD INVENTORY ERROR:", err);
+                    return res.status(500).json({
+                        message: err.sqlMessage || err.message
+                    });
+                }
+
+                res.json({
+                    rows: result,
+                    pagination: {
+                        page,
+                        limit: safeLimit,
+                        total,
+                        totalPages
+                    }
                 });
             }
-
-            res.json({
-                rows: result,
-                pagination: {
-                    page,
-                    limit: safeLimit,
-                    total,
-                    totalPages
-                }
-            });
-        });
+        );
     });
 });
 

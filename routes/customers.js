@@ -71,7 +71,7 @@ router.post("/", (req, res) => {
     );
 });
 
-// Customer master list with filters + pagination
+// Customer master list with filters + pagination + sorting
 router.get("/master-list", (req, res) => {
     const page = Math.max(parseInt(req.query.page) || 1, 1);
     const requestedLimit = parseInt(req.query.limit) || 50;
@@ -81,6 +81,7 @@ router.get("/master-list", (req, res) => {
     const collectorId = req.query.collector_id || "";
     const customerId = req.query.customer_id || "";
     const customerName = req.query.customer_name || "";
+    const sortOption = (req.query.sort_option || "").trim();
 
     let whereSql = " WHERE 1=1 ";
     const whereParams = [];
@@ -98,6 +99,65 @@ router.get("/master-list", (req, res) => {
     if (customerName) {
         whereSql += " AND c.name LIKE ? ";
         whereParams.push(`%${customerName}%`);
+    }
+
+    let orderBySql = " ORDER BY c.id ASC, s.id ASC ";
+
+    switch (sortOption) {
+        case "dp_desc":
+            orderBySql = `
+                ORDER BY
+                    pay_summary.downpayment_date IS NULL ASC,
+                    pay_summary.downpayment_date DESC,
+                    c.id ASC,
+                    s.id ASC
+            `;
+            break;
+        case "dp_asc":
+            orderBySql = `
+                ORDER BY
+                    pay_summary.downpayment_date IS NULL ASC,
+                    pay_summary.downpayment_date ASC,
+                    c.id ASC,
+                    s.id ASC
+            `;
+            break;
+        case "lastpay_desc":
+            orderBySql = `
+                ORDER BY
+                    pay_summary.last_regular_payment_date IS NULL ASC,
+                    pay_summary.last_regular_payment_date DESC,
+                    c.id ASC,
+                    s.id ASC
+            `;
+            break;
+        case "lastpay_asc":
+            orderBySql = `
+                ORDER BY
+                    pay_summary.last_regular_payment_date IS NULL ASC,
+                    pay_summary.last_regular_payment_date ASC,
+                    c.id ASC,
+                    s.id ASC
+            `;
+            break;
+        case "balance_desc":
+            orderBySql = `
+                ORDER BY
+                    COALESCE(s.balance, 0) DESC,
+                    c.id ASC,
+                    s.id ASC
+            `;
+            break;
+        case "balance_asc":
+            orderBySql = `
+                ORDER BY
+                    COALESCE(s.balance, 0) ASC,
+                    c.id ASC,
+                    s.id ASC
+            `;
+            break;
+        default:
+            break;
     }
 
     const countSql = `
@@ -123,6 +183,9 @@ router.get("/master-list", (req, res) => {
             s.quantity,
             i.capital_price,
             i.selling_price,
+            COALESCE(s.balance, 0) AS remaining_balance,
+            DATE_FORMAT(pay_summary.downpayment_date, '%Y-%m-%d') AS downpayment_date,
+            DATE_FORMAT(pay_summary.last_regular_payment_date, '%Y-%m-%d') AS last_regular_payment_date,
             col.name AS collector_name,
             CASE
                 WHEN c.is_active = 0 THEN 'Inactive'
@@ -132,8 +195,16 @@ router.get("/master-list", (req, res) => {
         INNER JOIN customers c ON s.customer_id = c.id
         LEFT JOIN inventory i ON s.item_id = i.id
         LEFT JOIN collectors col ON c.collector_id = col.id
+        LEFT JOIN (
+            SELECT
+                sale_id,
+                MIN(CASE WHEN LOWER(TRIM(payment_type)) = 'downpayment' THEN payment_date END) AS downpayment_date,
+                MAX(CASE WHEN LOWER(TRIM(payment_type)) = 'regular' THEN payment_date END) AS last_regular_payment_date
+            FROM payments
+            GROUP BY sale_id
+        ) AS pay_summary ON pay_summary.sale_id = s.id
         ${whereSql}
-        ORDER BY c.id ASC
+        ${orderBySql}
         LIMIT ? OFFSET ?
     `;
 
@@ -161,6 +232,7 @@ router.get("/master-list", (req, res) => {
                 limit: safeLimit,
                 totalRows,
                 totalPages,
+                sortOption,
                 rows: dataRows
             });
         });
@@ -282,7 +354,7 @@ router.delete("/:customerId", (req, res) => {
         db.query(getSalesSql, [customerId], (salesErr, salesRows) => {
             if (salesErr) {
                 return db.rollback(() => {
-                    console.log("GET SALES FOR DELETE ERROR:", salesErr);
+                    console.log("GET CUSTOMER SALES ERROR:", salesErr);
                     res.status(500).json({
                         message: salesErr.sqlMessage || salesErr.message
                     });
@@ -291,276 +363,243 @@ router.delete("/:customerId", (req, res) => {
 
             const saleIds = salesRows.map(row => row.id);
 
-            const finishDeleteCustomer = () => {
-                const deleteCustomerSql = `DELETE FROM customers WHERE id = ?`;
+            const restoreInventory = (callback) => {
+                if (!salesRows.length) return callback();
 
-                db.query(deleteCustomerSql, [customerId], (deleteCustomerErr, deleteCustomerResult) => {
-                    if (deleteCustomerErr) {
-                        return db.rollback(() => {
-                            console.log("DELETE CUSTOMER ERROR:", deleteCustomerErr);
-                            res.status(500).json({
-                                message: deleteCustomerErr.sqlMessage || deleteCustomerErr.message
-                            });
-                        });
-                    }
+                let pending = salesRows.length;
+                let failed = false;
 
-                    if (deleteCustomerResult.affectedRows === 0) {
-                        return db.rollback(() => {
-                            res.status(404).json({
-                                message: "Customer not found"
-                            });
-                        });
-                    }
+                salesRows.forEach(row => {
+                    const updateInventorySql = `
+                        UPDATE inventory
+                        SET quantity = quantity + ?
+                        WHERE id = ?
+                    `;
 
-                    db.commit((commitErr) => {
-                        if (commitErr) {
+                    db.query(updateInventorySql, [row.quantity, row.item_id], (invErr) => {
+                        if (failed) return;
+
+                        if (invErr) {
+                            failed = true;
                             return db.rollback(() => {
-                                console.log("DELETE CUSTOMER COMMIT ERROR:", commitErr);
+                                console.log("RESTORE INVENTORY ERROR:", invErr);
                                 res.status(500).json({
-                                    message: commitErr.sqlMessage || commitErr.message
+                                    message: invErr.sqlMessage || invErr.message
                                 });
                             });
                         }
 
-                        res.json({
-                            message: "Customer deleted and related records reverted successfully"
+                        pending -= 1;
+                        if (pending === 0) callback();
+                    });
+                });
+            };
+
+            const deleteRemitItems = (callback) => {
+                if (!saleIds.length) return callback();
+
+                const remitItemsSql = `
+                    DELETE FROM remit_items
+                    WHERE payment_id IN (
+                        SELECT id FROM payments WHERE sale_id IN (?)
+                    )
+                `;
+
+                db.query(remitItemsSql, [saleIds], (remitItemsErr) => {
+                    if (remitItemsErr) {
+                        return db.rollback(() => {
+                            console.log("DELETE REMIT ITEMS ERROR:", remitItemsErr);
+                            res.status(500).json({
+                                message: remitItemsErr.sqlMessage || remitItemsErr.message
+                            });
+                        });
+                    }
+                    callback();
+                });
+            };
+
+            const recalculateRemits = (callback) => {
+                const getRemitsSql = `
+                    SELECT DISTINCT r.id, c.commission_percent
+                    FROM remits r
+                    LEFT JOIN collectors c ON r.collector_id = c.id
+                `;
+
+                db.query(getRemitsSql, (remitsErr, remitsRows) => {
+                    if (remitsErr) {
+                        return db.rollback(() => {
+                            console.log("GET REMITS ERROR:", remitsErr);
+                            res.status(500).json({
+                                message: remitsErr.sqlMessage || remitsErr.message
+                            });
+                        });
+                    }
+
+                    if (!remitsRows.length) return callback();
+
+                    let pending = remitsRows.length;
+                    let failed = false;
+
+                    remitsRows.forEach(remit => {
+                        const getPaymentsSumSql = `
+                            SELECT COALESCE(SUM(p.amount), 0) AS total_selected_payments
+                            FROM remit_items ri
+                            INNER JOIN payments p ON ri.payment_id = p.id
+                            WHERE ri.remit_id = ?
+                        `;
+
+                        db.query(getPaymentsSumSql, [remit.id], (sumErr, sumRows) => {
+                            if (failed) return;
+
+                            if (sumErr) {
+                                failed = true;
+                                return db.rollback(() => {
+                                    console.log("REMIT SUM ERROR:", sumErr);
+                                    res.status(500).json({
+                                        message: sumErr.sqlMessage || sumErr.message
+                                    });
+                                });
+                            }
+
+                            const totalSelectedPayments = Number(sumRows[0]?.total_selected_payments || 0);
+                            const gas = 0;
+                            const food = 0;
+                            const miscellaneous = 0;
+                            const grossTotal = totalSelectedPayments - (gas + food + miscellaneous);
+                            const commissionPercent = Number(remit.commission_percent || 0);
+                            const commissionAmount = grossTotal * (commissionPercent / 100);
+                            const cashOnHand = totalSelectedPayments;
+                            const netTotal = cashOnHand - commissionAmount;
+                            const varianceAmount = cashOnHand - grossTotal;
+
+                            const updateRemitSql = `
+                                UPDATE remits
+                                SET total_selected_payments = ?,
+                                    gross_total = ?,
+                                    commission_percent = ?,
+                                    commission_amount = ?,
+                                    cash_on_hand = ?,
+                                    net_total = ?,
+                                    variance_amount = ?
+                                WHERE id = ?
+                            `;
+
+                            db.query(
+                                updateRemitSql,
+                                [
+                                    totalSelectedPayments,
+                                    grossTotal,
+                                    commissionPercent,
+                                    commissionAmount,
+                                    cashOnHand,
+                                    netTotal,
+                                    varianceAmount,
+                                    remit.id
+                                ],
+                                (updateErr) => {
+                                    if (failed) return;
+
+                                    if (updateErr) {
+                                        failed = true;
+                                        return db.rollback(() => {
+                                            console.log("UPDATE REMIT ERROR:", updateErr);
+                                            res.status(500).json({
+                                                message: updateErr.sqlMessage || updateErr.message
+                                            });
+                                        });
+                                    }
+
+                                    pending -= 1;
+                                    if (pending === 0) callback();
+                                }
+                            );
                         });
                     });
                 });
             };
 
-            if (saleIds.length === 0) {
-                return finishDeleteCustomer();
-            }
+            const deletePayments = (callback) => {
+                const deletePaymentsSql = `
+                    DELETE FROM payments
+                    WHERE sale_id IN (
+                        SELECT id FROM sales WHERE customer_id = ?
+                    )
+                `;
 
-            // 1) restore inventory quantities
-            const restoreInventoryTasks = salesRows.map((sale) => {
-                return new Promise((resolve, reject) => {
-                    const restoreSql = `
-                        UPDATE inventory
-                        SET quantity = quantity + ?
-                        WHERE id = ?
-                    `;
-                    db.query(restoreSql, [sale.quantity, sale.item_id], (err) => {
-                        if (err) reject(err);
-                        else resolve();
+                db.query(deletePaymentsSql, [customerId], (paymentsErr) => {
+                    if (paymentsErr) {
+                        return db.rollback(() => {
+                            console.log("DELETE PAYMENTS ERROR:", paymentsErr);
+                            res.status(500).json({
+                                message: paymentsErr.sqlMessage || paymentsErr.message
+                            });
+                        });
+                    }
+                    callback();
+                });
+            };
+
+            const deleteSales = (callback) => {
+                const deleteSalesSql = `DELETE FROM sales WHERE customer_id = ?`;
+
+                db.query(deleteSalesSql, [customerId], (salesDeleteErr) => {
+                    if (salesDeleteErr) {
+                        return db.rollback(() => {
+                            console.log("DELETE SALES ERROR:", salesDeleteErr);
+                            res.status(500).json({
+                                message: salesDeleteErr.sqlMessage || salesDeleteErr.message
+                            });
+                        });
+                    }
+                    callback();
+                });
+            };
+
+            const deleteCustomerSql = `DELETE FROM customers WHERE id = ?`;
+
+            restoreInventory(() => {
+                deleteRemitItems(() => {
+                    recalculateRemits(() => {
+                        deletePayments(() => {
+                            deleteSales(() => {
+                                db.query(deleteCustomerSql, [customerId], (customerErr, customerResult) => {
+                                    if (customerErr) {
+                                        return db.rollback(() => {
+                                            console.log("DELETE CUSTOMER ERROR:", customerErr);
+                                            res.status(500).json({
+                                                message: customerErr.sqlMessage || customerErr.message
+                                            });
+                                        });
+                                    }
+
+                                    if (customerResult.affectedRows === 0) {
+                                        return db.rollback(() => {
+                                            res.status(404).json({
+                                                message: "Customer not found"
+                                            });
+                                        });
+                                    }
+
+                                    db.commit((commitErr) => {
+                                        if (commitErr) {
+                                            return db.rollback(() => {
+                                                console.log("DELETE CUSTOMER COMMIT ERROR:", commitErr);
+                                                res.status(500).json({
+                                                    message: commitErr.sqlMessage || commitErr.message
+                                                });
+                                            });
+                                        }
+
+                                        res.json({
+                                            message: "Customer and related records deleted successfully. Inventory restored and remits recalculated."
+                                        });
+                                    });
+                                });
+                            });
+                        });
                     });
                 });
             });
-
-            Promise.all(restoreInventoryTasks)
-                .then(() => {
-                    const getPaymentsSql = `
-                        SELECT id
-                        FROM payments
-                        WHERE sale_id IN (?)
-                    `;
-
-                    db.query(getPaymentsSql, [saleIds], (paymentsErr, paymentsRows) => {
-                        if (paymentsErr) {
-                            return db.rollback(() => {
-                                console.log("GET PAYMENTS FOR DELETE ERROR:", paymentsErr);
-                                res.status(500).json({
-                                    message: paymentsErr.sqlMessage || paymentsErr.message
-                                });
-                            });
-                        }
-
-                        const paymentIds = paymentsRows.map(row => row.id);
-
-                        const continueAfterRemits = () => {
-                            const deletePayments = (callback) => {
-                                if (paymentIds.length === 0) return callback();
-
-                                const deletePaymentsSql = `
-                                    DELETE FROM payments
-                                    WHERE id IN (?)
-                                `;
-
-                                db.query(deletePaymentsSql, [paymentIds], (err) => {
-                                    if (err) {
-                                        return db.rollback(() => {
-                                            console.log("DELETE PAYMENTS ERROR:", err);
-                                            res.status(500).json({
-                                                message: err.sqlMessage || err.message
-                                            });
-                                        });
-                                    }
-                                    callback();
-                                });
-                            };
-
-                            deletePayments(() => {
-                                const deleteSalesSql = `
-                                    DELETE FROM sales
-                                    WHERE id IN (?)
-                                `;
-
-                                db.query(deleteSalesSql, [saleIds], (deleteSalesErr) => {
-                                    if (deleteSalesErr) {
-                                        return db.rollback(() => {
-                                            console.log("DELETE SALES ERROR:", deleteSalesErr);
-                                            res.status(500).json({
-                                                message: deleteSalesErr.sqlMessage || deleteSalesErr.message
-                                            });
-                                        });
-                                    }
-
-                                    finishDeleteCustomer();
-                                });
-                            });
-                        };
-
-                        if (paymentIds.length === 0) {
-                            return continueAfterRemits();
-                        }
-
-                        const getAffectedRemitsSql = `
-                            SELECT DISTINCT remit_id
-                            FROM remit_items
-                            WHERE payment_id IN (?)
-                        `;
-
-                        db.query(getAffectedRemitsSql, [paymentIds], (affectedErr, affectedRows) => {
-                            if (affectedErr) {
-                                return db.rollback(() => {
-                                    console.log("GET AFFECTED REMITS ERROR:", affectedErr);
-                                    res.status(500).json({
-                                        message: affectedErr.sqlMessage || affectedErr.message
-                                    });
-                                });
-                            }
-
-                            const affectedRemitIds = affectedRows.map(row => row.remit_id);
-
-                            const deleteRemitItemsSql = `
-                                DELETE FROM remit_items
-                                WHERE payment_id IN (?)
-                            `;
-
-                            db.query(deleteRemitItemsSql, [paymentIds], (deleteRemitItemsErr) => {
-                                if (deleteRemitItemsErr) {
-                                    return db.rollback(() => {
-                                        console.log("DELETE REMIT ITEMS ERROR:", deleteRemitItemsErr);
-                                        res.status(500).json({
-                                            message: deleteRemitItemsErr.sqlMessage || deleteRemitItemsErr.message
-                                        });
-                                    });
-                                }
-
-                                if (affectedRemitIds.length === 0) {
-                                    return continueAfterRemits();
-                                }
-
-                                const recalcOneRemit = (remitId) => {
-                                    return new Promise((resolve, reject) => {
-                                        const getRemitSql = `
-                                            SELECT
-                                                id,
-                                                gas,
-                                                food,
-                                                miscellaneous,
-                                                commission_percent,
-                                                cash_on_hand
-                                            FROM remits
-                                            WHERE id = ?
-                                        `;
-
-                                        db.query(getRemitSql, [remitId], (getRemitErr, remitRows) => {
-                                            if (getRemitErr) return reject(getRemitErr);
-                                            if (remitRows.length === 0) return resolve();
-
-                                            const remit = remitRows[0];
-
-                                            const sumItemsSql = `
-                                                SELECT COUNT(*) AS item_count, COALESCE(SUM(payment_amount), 0) AS total_selected_payments
-                                                FROM remit_items
-                                                WHERE remit_id = ?
-                                            `;
-
-                                            db.query(sumItemsSql, [remitId], (sumErr, sumRows) => {
-                                                if (sumErr) return reject(sumErr);
-
-                                                const itemCount = Number(sumRows[0].item_count || 0);
-                                                const totalSelectedPayments = Number(sumRows[0].total_selected_payments || 0);
-
-                                                if (itemCount === 0) {
-                                                    const deleteEmptyRemitSql = `
-                                                        DELETE FROM remits
-                                                        WHERE id = ?
-                                                    `;
-                                                    db.query(deleteEmptyRemitSql, [remitId], (deleteErr) => {
-                                                        if (deleteErr) return reject(deleteErr);
-                                                        resolve();
-                                                    });
-                                                    return;
-                                                }
-
-                                                const gas = Number(remit.gas || 0);
-                                                const food = Number(remit.food || 0);
-                                                const miscellaneous = Number(remit.miscellaneous || 0);
-                                                const commissionPercent = Number(remit.commission_percent || 0);
-                                                const cashOnHand = Number(remit.cash_on_hand || 0);
-
-                                                const totalExpenses = gas + food + miscellaneous;
-                                                const commissionAmount = (totalSelectedPayments - totalExpenses) * (commissionPercent / 100);
-                                                const grossTotal = totalSelectedPayments - commissionAmount;
-                                                const netTotal = cashOnHand - commissionAmount;
-                                                const varianceAmount = grossTotal - netTotal;
-
-                                                const updateRemitSql = `
-                                                    UPDATE remits
-                                                    SET
-                                                        total_selected_payments = ?,
-                                                        commission_amount = ?,
-                                                        gross_total = ?,
-                                                        net_total = ?,
-                                                        variance_amount = ?
-                                                    WHERE id = ?
-                                                `;
-
-                                                db.query(
-                                                    updateRemitSql,
-                                                    [
-                                                        totalSelectedPayments,
-                                                        commissionAmount,
-                                                        grossTotal,
-                                                        netTotal,
-                                                        varianceAmount,
-                                                        remitId
-                                                    ],
-                                                    (updateErr) => {
-                                                        if (updateErr) return reject(updateErr);
-                                                        resolve();
-                                                    }
-                                                );
-                                            });
-                                        });
-                                    });
-                                };
-
-                                Promise.all(affectedRemitIds.map(recalcOneRemit))
-                                    .then(() => continueAfterRemits())
-                                    .catch((promiseErr) => {
-                                        db.rollback(() => {
-                                            console.log("RECALC REMITS ERROR:", promiseErr);
-                                            res.status(500).json({
-                                                message: promiseErr.sqlMessage || promiseErr.message || promiseErr.toString()
-                                            });
-                                        });
-                                    });
-                            });
-                        });
-                    });
-                })
-                .catch((restoreErr) => {
-                    db.rollback(() => {
-                        console.log("RESTORE INVENTORY ERROR:", restoreErr);
-                        res.status(500).json({
-                            message: restoreErr.sqlMessage || restoreErr.message || restoreErr.toString()
-                        });
-                    });
-                });
         });
     });
 });
