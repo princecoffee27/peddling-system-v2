@@ -351,16 +351,45 @@ router.post("/", (req, res) => {
     });
 });
 
-// Load remit history with pagination
+// Load remit history with pagination, collector filter, and filtered totals
 router.get("/", (req, res) => {
     const page = parseInt(req.query.page, 10) || 1;
     const requestedLimit = parseInt(req.query.limit, 10) || 25;
     const safeLimit = [25, 50, 100].includes(requestedLimit) ? requestedLimit : 25;
     const offset = (page - 1) * safeLimit;
+    const collectorId = req.query.collector_id;
+
+    let whereSql = "";
+    const params = [];
+
+    if (collectorId) {
+        whereSql = " WHERE remits.collector_id = ? ";
+        params.push(collectorId);
+    }
 
     const countSql = `
         SELECT COUNT(*) AS total
         FROM remits
+        ${whereSql}
+    `;
+
+    const totalsSql = `
+        SELECT
+            IFNULL(SUM(remits.total_selected_payments), 0) AS total_selected_payments,
+            IFNULL(SUM(remits.gas), 0) AS gas,
+            IFNULL(SUM(remits.food), 0) AS food,
+            IFNULL(SUM(remits.miscellaneous), 0) AS miscellaneous,
+            IFNULL(SUM(remits.gas + remits.food + remits.miscellaneous), 0) AS total_expenses,
+            IFNULL(SUM(remits.commission_amount), 0) AS commission_amount,
+            IFNULL(SUM(remits.negative_deduction), 0) AS negative_deduction,
+            IFNULL(SUM(remits.cash_advance_deduction), 0) AS cash_advance_deduction,
+            IFNULL(SUM(remits.final_commission_paid), 0) AS final_commission_paid,
+            IFNULL(SUM(remits.gross_total), 0) AS gross_total,
+            IFNULL(SUM(remits.cash_on_hand), 0) AS cash_on_hand,
+            IFNULL(SUM(remits.net_total), 0) AS net_total,
+            IFNULL(SUM(remits.variance_amount), 0) AS variance_amount
+        FROM remits
+        ${whereSql}
     `;
 
     const dataSql = `
@@ -386,21 +415,22 @@ router.get("/", (req, res) => {
             remits.cash_on_hand,
             remits.net_total,
             remits.variance_amount,
-remits.notes,
-EXISTS (
-    SELECT 1
-    FROM collector_negatives cn
-    WHERE cn.source_type = 'remit_shortage'
-    AND cn.source_remit_id = remits.id
-    AND cn.remarks LIKE '%[DEDUCT_WAIVED]%'
-) AS negative_deduction_waived
+            remits.notes,
+            EXISTS (
+                SELECT 1
+                FROM collector_negatives cn
+                WHERE cn.source_type = 'remit_shortage'
+                AND cn.source_remit_id = remits.id
+                AND cn.remarks LIKE '%[DEDUCT_WAIVED]%'
+            ) AS negative_deduction_waived
         FROM remits
         JOIN collectors ON remits.collector_id = collectors.id
+        ${whereSql}
         ORDER BY remits.id DESC
         LIMIT ? OFFSET ?
     `;
 
-    db.query(countSql, (countErr, countResult) => {
+    db.query(countSql, params, (countErr, countResult) => {
         if (countErr) {
             console.log("COUNT REMITS ERROR:", countErr);
             return res.status(500).json({
@@ -411,22 +441,32 @@ EXISTS (
         const total = countResult[0]?.total || 0;
         const totalPages = total > 0 ? Math.ceil(total / safeLimit) : 0;
 
-        db.query(dataSql, [safeLimit, offset], (err, result) => {
-            if (err) {
-                console.log("LOAD REMITS ERROR:", err);
+        db.query(totalsSql, params, (totalsErr, totalsResult) => {
+            if (totalsErr) {
+                console.log("TOTAL REMITS ERROR:", totalsErr);
                 return res.status(500).json({
-                    message: err.sqlMessage || err.message
+                    message: totalsErr.sqlMessage || totalsErr.message
                 });
             }
 
-            res.json({
-                rows: result,
-                pagination: {
-                    page,
-                    limit: safeLimit,
-                    total,
-                    totalPages
+            db.query(dataSql, [...params, safeLimit, offset], (err, result) => {
+                if (err) {
+                    console.log("LOAD REMITS ERROR:", err);
+                    return res.status(500).json({
+                        message: err.sqlMessage || err.message
+                    });
                 }
+
+                res.json({
+                    rows: result,
+                    totals: totalsResult[0] || {},
+                    pagination: {
+                        page,
+                        limit: safeLimit,
+                        total,
+                        totalPages
+                    }
+                });
             });
         });
     });

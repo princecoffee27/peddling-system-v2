@@ -385,16 +385,42 @@
         <h2>Saved Remits</h2>
 
         <div class="toolbar-line">
-            <div>
-                <label for="historyPageSizeSelect" style="margin-bottom:0;">Rows per page</label>
-                <select id="historyPageSizeSelect" style="margin-left:10px; width:auto;">
-                    <option value="25">25</option>
-                    <option value="50">50</option>
-                    <option value="100">100</option>
-                </select>
+            <div style="display:flex; gap:12px; align-items:end; flex-wrap:wrap;">
+                <div>
+                    <label for="historyCollectorFilter" style="margin-bottom:0;">Filter Collector</label>
+                    <select id="historyCollectorFilter" style="margin-left:10px; width:auto; min-width:220px;">
+                        <option value="">All collectors</option>
+                    </select>
+                </div>
+
+                <div>
+                    <label for="historyPageSizeSelect" style="margin-bottom:0;">Rows per page</label>
+                    <select id="historyPageSizeSelect" style="margin-left:10px; width:auto;">
+                        <option value="25">25</option>
+                        <option value="50">50</option>
+                        <option value="100">100</option>
+                    </select>
+                </div>
             </div>
 
             <div id="historyTableSummary" class="muted">Saved remit history</div>
+        </div>
+
+        <div class="summary-box" id="historyTotalsBox">
+            <h3 style="margin-top:0;">Totals for Filtered Saved Remits</h3>
+            <p>Total Selected Payments: ₱<span id="historyTotalSelectedPayments">0.00</span></p>
+            <p>Total Gas: ₱<span id="historyTotalGas">0.00</span></p>
+            <p>Total Food: ₱<span id="historyTotalFood">0.00</span></p>
+            <p>Total Miscellaneous: ₱<span id="historyTotalMiscellaneous">0.00</span></p>
+            <p>Total Expenses: ₱<span id="historyTotalExpenses">0.00</span></p>
+            <p>Total Commission Amount: ₱<span id="historyTotalCommissionAmount">0.00</span></p>
+            <p>Total Negative Deduction: ₱<span id="historyTotalNegativeDeduction">0.00</span></p>
+            <p>Total Cash Advance Deduction: ₱<span id="historyTotalCashAdvanceDeduction">0.00</span></p>
+            <p>Total Final Commission Paid: ₱<span id="historyTotalFinalCommissionPaid">0.00</span></p>
+            <p>Total Gross Total: ₱<span id="historyTotalGrossTotal">0.00</span></p>
+            <p>Total Cash On Hand: ₱<span id="historyTotalCashOnHand">0.00</span></p>
+            <p>Total Net Total: ₱<span id="historyTotalNetTotal">0.00</span></p>
+            <p>Total Positive / Negative: ₱<span id="historyTotalVarianceAmount">0.00</span></p>
         </div>
 
         <div class="table-wrap">
@@ -467,6 +493,7 @@
         const searchTableSummary = document.getElementById("searchTableSummary");
 
         const historyPageSizeSelect = document.getElementById("historyPageSizeSelect");
+        const historyCollectorFilter = document.getElementById("historyCollectorFilter");
         const historyPrevBtn = document.getElementById("historyPrevBtn");
         const historyNextBtn = document.getElementById("historyNextBtn");
         const historyPageInfo = document.getElementById("historyPageInfo");
@@ -509,11 +536,20 @@
 
             collectors = data;
             collectorSearchSelect.innerHTML = `<option value="">Select collector</option>`;
+            historyCollectorFilter.innerHTML = `<option value="">All collectors</option>`;
 
             data.forEach(collector => {
+                const optionText = `${collector.id} - ${collector.name}`;
+
                 collectorSearchSelect.innerHTML += `
                     <option value="${collector.id}">
-                        ${collector.id} - ${collector.name}
+                        ${optionText}
+                    </option>
+                `;
+
+                historyCollectorFilter.innerHTML += `
+                    <option value="${collector.id}">
+                        ${optionText}
                     </option>
                 `;
             });
@@ -835,7 +871,15 @@
             historyCurrentPage = page;
             historyCurrentLimit = Number(limit);
 
-            const res = await fetch(`/remits?page=${historyCurrentPage}&limit=${historyCurrentLimit}`);
+            const params = new URLSearchParams();
+            params.append("page", historyCurrentPage);
+            params.append("limit", historyCurrentLimit);
+
+            if (historyCollectorFilter.value) {
+                params.append("collector_id", historyCollectorFilter.value);
+            }
+
+            const res = await fetch(`/remits?${params.toString()}`);
             const data = await res.json();
 
             if (!res.ok) {
@@ -889,12 +933,30 @@
                 });
             }
 
+            updateHistoryTotals(data.totals || {});
+
             updateHistoryPagination(data.pagination || {
                 page: 1,
                 totalPages: 1,
                 total: 0,
                 limit: historyCurrentLimit
             });
+        }
+
+        function updateHistoryTotals(totals) {
+            document.getElementById("historyTotalSelectedPayments").textContent = money(totals.total_selected_payments);
+            document.getElementById("historyTotalGas").textContent = money(totals.gas);
+            document.getElementById("historyTotalFood").textContent = money(totals.food);
+            document.getElementById("historyTotalMiscellaneous").textContent = money(totals.miscellaneous);
+            document.getElementById("historyTotalExpenses").textContent = money(totals.total_expenses);
+            document.getElementById("historyTotalCommissionAmount").textContent = money(totals.commission_amount);
+            document.getElementById("historyTotalNegativeDeduction").textContent = money(totals.negative_deduction);
+            document.getElementById("historyTotalCashAdvanceDeduction").textContent = money(totals.cash_advance_deduction);
+            document.getElementById("historyTotalFinalCommissionPaid").textContent = money(totals.final_commission_paid);
+            document.getElementById("historyTotalGrossTotal").textContent = money(totals.gross_total);
+            document.getElementById("historyTotalCashOnHand").textContent = money(totals.cash_on_hand);
+            document.getElementById("historyTotalNetTotal").textContent = money(totals.net_total);
+            document.getElementById("historyTotalVarianceAmount").textContent = money(totals.variance_amount);
         }
 
         function updateHistoryPagination(pagination) {
@@ -1118,6 +1180,10 @@ async function waiveNegativeDeduction(remitId, amount) {
 
         historyPageSizeSelect.addEventListener("change", () => {
             historyCurrentLimit = Number(historyPageSizeSelect.value);
+            loadRemitsHistory(1, historyCurrentLimit);
+        });
+
+        historyCollectorFilter.addEventListener("change", () => {
             loadRemitsHistory(1, historyCurrentLimit);
         });
 
