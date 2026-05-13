@@ -498,6 +498,7 @@
         const historyNextBtn = document.getElementById("historyNextBtn");
         const historyPageInfo = document.getElementById("historyPageInfo");
         const historyTableSummary = document.getElementById("historyTableSummary");
+       
 
         let collectors = [];
         let searchResults = [];
@@ -1199,6 +1200,29 @@ async function waiveNegativeDeduction(remitId, amount) {
             }
         });
 
+async function applyRemitPrivileges() {
+    try {
+        const res = await fetch("/auth/me");
+        const data = await res.json();
+
+        if (!res.ok || !data.user) {
+            window.location.href = "login.html";
+            return;
+        }
+
+        const historyTotalsBox = document.getElementById("historyTotalsBox");
+
+        if (data.user.role === "admin") {
+            historyTotalsBox.style.display = "block";
+        } else {
+            historyTotalsBox.style.display = "none";
+        }
+    } catch (err) {
+        console.error("Remit privilege error:", err);
+    }
+}
+
+        applyRemitPrivileges();
         setTodayDate();
         loadCollectors();
         renderSearchResults();
