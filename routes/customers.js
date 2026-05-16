@@ -16,7 +16,7 @@ router.get("/", (req, res) => {
             c.is_active
         FROM customers c
         LEFT JOIN collectors col ON c.collector_id = col.id
-        ORDER BY c.id ASC
+        ORDER BY c.id DESC
     `;
 
     db.query(sql, (err, result) => {
@@ -101,7 +101,7 @@ router.get("/master-list", (req, res) => {
         whereParams.push(`%${customerName}%`);
     }
 
-    let orderBySql = " ORDER BY c.id ASC, s.id ASC ";
+    let orderBySql = " ORDER BY c.id DESC, s.id DESC ";
 
     switch (sortOption) {
         case "dp_desc":
@@ -109,8 +109,8 @@ router.get("/master-list", (req, res) => {
                 ORDER BY
                     pay_summary.downpayment_date IS NULL ASC,
                     pay_summary.downpayment_date DESC,
-                    c.id ASC,
-                    s.id ASC
+                    c.id DESC,
+                    s.id DESC
             `;
             break;
         case "dp_asc":
@@ -118,8 +118,8 @@ router.get("/master-list", (req, res) => {
                 ORDER BY
                     pay_summary.downpayment_date IS NULL ASC,
                     pay_summary.downpayment_date ASC,
-                    c.id ASC,
-                    s.id ASC
+                    c.id DESC,
+                    s.id DESC
             `;
             break;
         case "lastpay_desc":
@@ -127,8 +127,8 @@ router.get("/master-list", (req, res) => {
                 ORDER BY
                     pay_summary.last_regular_payment_date IS NULL ASC,
                     pay_summary.last_regular_payment_date DESC,
-                    c.id ASC,
-                    s.id ASC
+                    c.id DESC,
+                    s.id DESC
             `;
             break;
         case "lastpay_asc":
@@ -136,24 +136,24 @@ router.get("/master-list", (req, res) => {
                 ORDER BY
                     pay_summary.last_regular_payment_date IS NULL ASC,
                     pay_summary.last_regular_payment_date ASC,
-                    c.id ASC,
-                    s.id ASC
+                    c.id DESC,
+                    s.id DESC
             `;
             break;
         case "balance_desc":
             orderBySql = `
                 ORDER BY
                     COALESCE(s.balance, 0) DESC,
-                    c.id ASC,
-                    s.id ASC
+                    c.id DESC,
+                    s.id DESC
             `;
             break;
         case "balance_asc":
             orderBySql = `
                 ORDER BY
                     COALESCE(s.balance, 0) ASC,
-                    c.id ASC,
-                    s.id ASC
+                    c.id DESC,
+                    s.id DESC
             `;
             break;
         default:

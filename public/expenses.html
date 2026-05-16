@@ -181,6 +181,47 @@
             flex-wrap: wrap;
         }
 
+        .admin-expense-tools {
+            display: none;
+            margin-bottom: 14px;
+            padding: 14px;
+            background: #f9fafb;
+            border: 1px solid #e5e7eb;
+            border-radius: 10px;
+        }
+
+        .filter-grid {
+            display: grid;
+            grid-template-columns: repeat(4, minmax(160px, 1fr));
+            gap: 10px;
+            align-items: end;
+        }
+
+        .total-grid {
+            display: grid;
+            grid-template-columns: repeat(5, minmax(150px, 1fr));
+            gap: 10px;
+            margin-top: 12px;
+        }
+
+        .total-card {
+            background: white;
+            border: 1px solid #dcdfe6;
+            border-radius: 10px;
+            padding: 10px;
+        }
+
+        .total-card span {
+            display: block;
+            color: #6b7280;
+            font-size: 12px;
+            margin-bottom: 6px;
+        }
+
+        .total-card strong {
+            font-size: 16px;
+        }
+
         @media (max-width: 1000px) {
             .page-wrap {
                 grid-template-columns: 1fr;
@@ -268,6 +309,42 @@
             <h2>Expenses List</h2>
             <p class="muted">Default load is 50. Use 50 or 100 with pagination.</p>
 
+            <div id="adminExpenseTools" class="admin-expense-tools">
+                <h3 style="margin-top:0;">Expense Totals and Filters</h3>
+
+                <div class="filter-grid">
+                    <div class="field" style="margin-bottom:0;">
+                        <label for="filterCollector">Collector</label>
+                        <select id="filterCollector">
+                            <option value="">All collectors</option>
+                        </select>
+                    </div>
+
+                    <div class="field" style="margin-bottom:0;">
+                        <label for="filterDateFrom">Date From</label>
+                        <input type="date" id="filterDateFrom" />
+                    </div>
+
+                    <div class="field" style="margin-bottom:0;">
+                        <label for="filterDateTo">Date To</label>
+                        <input type="date" id="filterDateTo" />
+                    </div>
+
+                    <div class="btn-row" style="margin-top:0;">
+                        <button type="button" id="applyFilterBtn" class="btn-primary">Apply Filter</button>
+                        <button type="button" id="clearFilterBtn" class="btn-secondary">Clear</button>
+                    </div>
+                </div>
+
+                <div class="total-grid">
+                    <div class="total-card"><span>Driver Wage Total</span><strong>₱<b id="sumDriver">0.00</b></strong></div>
+                    <div class="total-card"><span>Food Allowance Total</span><strong>₱<b id="sumFood">0.00</b></strong></div>
+                    <div class="total-card"><span>Gasoline Total</span><strong>₱<b id="sumGasoline">0.00</b></strong></div>
+                    <div class="total-card"><span>Miscellaneous Total</span><strong>₱<b id="sumMisc">0.00</b></strong></div>
+                    <div class="total-card"><span>Grand Total Expense</span><strong>₱<b id="sumGrandTotal">0.00</b></strong></div>
+                </div>
+            </div>
+
             <div class="table-toolbar">
                 <div>
                     <label for="pageSizeSelect" style="margin-bottom:0;">Rows per page</label>
@@ -336,12 +413,24 @@
         const nextPageBtn = document.getElementById("nextPageBtn");
         const pageInfo = document.getElementById("pageInfo");
         const tableSummary = document.getElementById("tableSummary");
+        const adminExpenseTools = document.getElementById("adminExpenseTools");
+        const filterCollector = document.getElementById("filterCollector");
+        const filterDateFrom = document.getElementById("filterDateFrom");
+        const filterDateTo = document.getElementById("filterDateTo");
+        const applyFilterBtn = document.getElementById("applyFilterBtn");
+        const clearFilterBtn = document.getElementById("clearFilterBtn");
+        const sumDriver = document.getElementById("sumDriver");
+        const sumFood = document.getElementById("sumFood");
+        const sumGasoline = document.getElementById("sumGasoline");
+        const sumMisc = document.getElementById("sumMisc");
+        const sumGrandTotal = document.getElementById("sumGrandTotal");
 
         let expenses = [];
         let collectorsCache = [];
         let currentPage = 1;
         let totalPages = 1;
         let currentLimit = 50;
+        let isAdminUser = false;
 
         function formatMoney(value) {
             return Number(value || 0).toFixed(2);
@@ -367,6 +456,35 @@
             }
         }
 
+        async function applyExpensePrivileges() {
+            try {
+                const res = await fetch("/auth/me");
+                const data = await res.json();
+
+                if (!res.ok || !data.user) {
+                    window.location.href = "login.html";
+                    return;
+                }
+
+                isAdminUser = data.user.role === "admin";
+                adminExpenseTools.style.display = isAdminUser ? "block" : "none";
+            } catch (err) {
+                console.error("Expense privilege error:", err);
+                adminExpenseTools.style.display = "none";
+                isAdminUser = false;
+            }
+        }
+
+        function updateExpenseSummary(summary) {
+            if (!isAdminUser || !summary) return;
+
+            sumDriver.textContent = formatMoney(summary.total_driver_daily_wage);
+            sumFood.textContent = formatMoney(summary.total_staffs_food_allowance);
+            sumGasoline.textContent = formatMoney(summary.total_gasoline);
+            sumMisc.textContent = formatMoney(summary.total_miscellaneous);
+            sumGrandTotal.textContent = formatMoney(summary.grand_total_expense);
+        }
+
         function resetForm() {
             expenseForm.reset();
             expenseIdInput.value = "";
@@ -389,11 +507,20 @@
 
                 collectorsCache = data;
                 collectorSelect.innerHTML = `<option value="">Select collector</option>`;
+                filterCollector.innerHTML = `<option value="">All collectors</option>`;
 
                 data.forEach((collector) => {
+                    const optionText = `${collector.id} - ${collector.name}`;
+
                     collectorSelect.innerHTML += `
                         <option value="${collector.id}">
-                            ${collector.id} - ${collector.name}
+                            ${optionText}
+                        </option>
+                    `;
+
+                    filterCollector.innerHTML += `
+                        <option value="${collector.id}">
+                            ${optionText}
                         </option>
                     `;
                 });
@@ -408,7 +535,18 @@
             currentLimit = Number(limit);
 
             try {
-                const res = await fetch(`/expenses?page=${currentPage}&limit=${currentLimit}`);
+                const params = new URLSearchParams({
+                    page: currentPage,
+                    limit: currentLimit
+                });
+
+                if (isAdminUser) {
+                    if (filterCollector.value) params.append("collector_id", filterCollector.value);
+                    if (filterDateFrom.value) params.append("date_from", filterDateFrom.value);
+                    if (filterDateTo.value) params.append("date_to", filterDateTo.value);
+                }
+
+                const res = await fetch(`/expenses?${params.toString()}`);
                 const data = await res.json();
 
                 if (!res.ok) {
@@ -417,6 +555,7 @@
                 }
 
                 expenses = data.rows || [];
+                updateExpenseSummary(data.summary);
 
                 if (!Array.isArray(expenses) || expenses.length === 0) {
                     expenseTableBody.innerHTML = `
@@ -622,6 +761,17 @@
             }
         });
 
+        applyFilterBtn.addEventListener("click", async function() {
+            await loadExpenses(1, currentLimit);
+        });
+
+        clearFilterBtn.addEventListener("click", async function() {
+            filterCollector.value = "";
+            filterDateFrom.value = "";
+            filterDateTo.value = "";
+            await loadExpenses(1, currentLimit);
+        });
+
         [driverInput, foodInput, gasolineInput, miscInput].forEach(input => {
             input.addEventListener("input", computeTotal);
         });
@@ -631,6 +781,7 @@
             currentLimit = 50;
             setTodayDateIfEmpty();
             computeTotal();
+            await applyExpensePrivileges();
             await loadCollectors();
             await loadExpenses(1, 50);
         }

@@ -23,16 +23,50 @@ router.get("/collectors", (req, res) => {
     });
 });
 
-// Load expenses with pagination
+// Load expenses with pagination + optional filters
 router.get("/", (req, res) => {
     const page = parseInt(req.query.page, 10) || 1;
     const limit = parseInt(req.query.limit, 10) || 50;
     const safeLimit = [50, 100].includes(limit) ? limit : 50;
     const offset = (page - 1) * safeLimit;
 
+    const { collector_id, date_from, date_to } = req.query;
+    const where = [];
+    const params = [];
+
+    if (collector_id) {
+        where.push("e.collector_id = ?");
+        params.push(collector_id);
+    }
+
+    if (date_from) {
+        where.push("e.expense_date >= ?");
+        params.push(date_from);
+    }
+
+    if (date_to) {
+        where.push("e.expense_date <= ?");
+        params.push(date_to);
+    }
+
+    const whereSql = where.length ? `WHERE ${where.join(" AND ")}` : "";
+    const isAdmin = req.session?.user?.role === "admin";
+
     const countSql = `
         SELECT COUNT(*) AS total
-        FROM expenses
+        FROM expenses e
+        ${whereSql}
+    `;
+
+    const summarySql = `
+        SELECT
+            COALESCE(SUM(e.driver_daily_wage), 0) AS total_driver_daily_wage,
+            COALESCE(SUM(e.staffs_food_allowance), 0) AS total_staffs_food_allowance,
+            COALESCE(SUM(e.gasoline), 0) AS total_gasoline,
+            COALESCE(SUM(e.miscellaneous), 0) AS total_miscellaneous,
+            COALESCE(SUM(e.total_expense), 0) AS grand_total_expense
+        FROM expenses e
+        ${whereSql}
     `;
 
     const dataSql = `
@@ -51,11 +85,12 @@ router.get("/", (req, res) => {
             e.notes
         FROM expenses e
         LEFT JOIN collectors c ON e.collector_id = c.id
+        ${whereSql}
         ORDER BY e.expense_date DESC, e.id DESC
         LIMIT ? OFFSET ?
     `;
 
-    db.query(countSql, (countErr, countResult) => {
+    db.query(countSql, params, (countErr, countResult) => {
         if (countErr) {
             console.log("COUNT EXPENSES ERROR:", countErr);
             return res.status(500).json({
@@ -66,7 +101,7 @@ router.get("/", (req, res) => {
         const total = countResult[0]?.total || 0;
         const totalPages = total > 0 ? Math.ceil(total / safeLimit) : 0;
 
-        db.query(dataSql, [safeLimit, offset], (err, result) => {
+        db.query(dataSql, [...params, safeLimit, offset], (err, result) => {
             if (err) {
                 console.log("LOAD EXPENSES ERROR:", err);
                 return res.status(500).json({
@@ -74,14 +109,38 @@ router.get("/", (req, res) => {
                 });
             }
 
-            res.json({
-                rows: result,
-                pagination: {
-                    page,
-                    limit: safeLimit,
-                    total,
-                    totalPages
+            const sendResponse = (summary = null) => {
+                res.json({
+                    rows: result,
+                    summary,
+                    pagination: {
+                        page,
+                        limit: safeLimit,
+                        total,
+                        totalPages
+                    }
+                });
+            };
+
+            if (!isAdmin) {
+                return sendResponse(null);
+            }
+
+            db.query(summarySql, params, (summaryErr, summaryResult) => {
+                if (summaryErr) {
+                    console.log("EXPENSE SUMMARY ERROR:", summaryErr);
+                    return res.status(500).json({
+                        message: summaryErr.sqlMessage || summaryErr.message
+                    });
                 }
+
+                sendResponse(summaryResult[0] || {
+                    total_driver_daily_wage: 0,
+                    total_staffs_food_allowance: 0,
+                    total_gasoline: 0,
+                    total_miscellaneous: 0,
+                    grand_total_expense: 0
+                });
             });
         });
     });

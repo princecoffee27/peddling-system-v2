@@ -5,6 +5,113 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Peddling System</title>
     <link rel="stylesheet" href="css/style.css">
+
+    <style>
+        .admin-notifications {
+            background: #ffffff;
+            border: 1px solid #e5e7eb;
+            border-radius: 14px;
+            padding: 18px;
+            margin: 20px 0;
+            box-shadow: 0 8px 20px rgba(15, 23, 42, 0.06);
+        }
+
+        .notification-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 14px;
+        }
+
+        .notification-title-wrap h3 {
+            margin: 0;
+            font-size: 20px;
+        }
+
+        .notification-title-wrap p {
+            margin: 4px 0 0;
+            color: #6b7280;
+            font-size: 13px;
+        }
+
+        .read-all-btn {
+            background: #2563eb;
+            color: white;
+            border: none;
+            padding: 10px 14px;
+            border-radius: 10px;
+            cursor: pointer;
+            font-weight: 700;
+        }
+
+        .read-all-btn:hover {
+            background: #1d4ed8;
+        }
+
+        .notification-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+            gap: 12px;
+        }
+
+        .notification-card {
+            border: 1px solid #e5e7eb;
+            border-radius: 12px;
+            padding: 14px;
+            background: #f9fafb;
+        }
+
+        .notification-card.has-new {
+            border-color: #f59e0b;
+            background: #fffbeb;
+        }
+
+        .notification-card-title {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-weight: 800;
+            margin-bottom: 10px;
+        }
+
+        .notification-count {
+            background: #111827;
+            color: white;
+            border-radius: 999px;
+            padding: 4px 9px;
+            font-size: 12px;
+        }
+
+        .notification-line {
+            display: flex;
+            justify-content: space-between;
+            gap: 10px;
+            font-size: 13px;
+            margin-top: 7px;
+            color: #374151;
+        }
+
+        .notification-line strong {
+            color: #111827;
+        }
+
+        .notification-empty {
+            color: #6b7280;
+            font-size: 14px;
+            padding: 14px;
+            border: 1px dashed #d1d5db;
+            border-radius: 10px;
+            background: #f9fafb;
+        }
+
+        @media (max-width: 700px) {
+            .notification-header {
+                align-items: flex-start;
+                flex-direction: column;
+            }
+        }
+    </style>
 </head>
 <body>
 
@@ -62,6 +169,20 @@
                 <h3>Total Expenses</h3>
                 <p id="totalExpenses">₱0</p>
             </div>
+        </div>
+
+
+        <div class="admin-notifications" id="adminNotifications" style="display:none;">
+            <div class="notification-header">
+                <div class="notification-title-wrap">
+                    <h3>Admin New Data Notifications</h3>
+                    <p id="notificationSubText">New records since your last Read All.</p>
+                </div>
+                <button class="read-all-btn" id="readAllNotificationsBtn" type="button">Read All</button>
+            </div>
+
+            <div id="notificationSummary" class="notification-empty">Loading new data notifications...</div>
+            <div class="notification-grid" id="notificationGrid" style="display:none;"></div>
         </div>
 
         <div class="table-card">
@@ -144,6 +265,154 @@ async function loadRecentActivity() {
     }
 }
 
+
+function canSeeAdminNotifications(user) {
+    const role = String(user?.role || "").toLowerCase();
+    const privileges = user?.privileges || {};
+
+    return role === "admin" || privileges.manage_users === true;
+}
+
+function makeNotificationCard(title, count, rows, extraHtml = "") {
+    const safeCount = Number(count || 0);
+    const rowHtml = rows.map(row => `
+        <div class="notification-line">
+            <span>${row.label}</span>
+            <strong>${row.value}</strong>
+        </div>
+    `).join("");
+
+    return `
+        <div class="notification-card ${safeCount > 0 ? "has-new" : ""}">
+            <div class="notification-card-title">
+                <span>${title}</span>
+                <span class="notification-count">${safeCount}</span>
+            </div>
+            ${rowHtml}
+            ${extraHtml}
+        </div>
+    `;
+}
+
+function makePaymentsByCollectorHtml(byCollector) {
+    const rows = Array.isArray(byCollector) ? byCollector : [];
+
+    if (!rows.length) {
+        return `
+            <div class="notification-breakdown">
+                <div class="notification-breakdown-title">By collector</div>
+                <div class="notification-breakdown-empty">No new payment breakdown.</div>
+            </div>
+        `;
+    }
+
+    return `
+        <div class="notification-breakdown">
+            <div class="notification-breakdown-title">By collector</div>
+            ${rows.map(row => `
+                <div class="notification-breakdown-row">
+                    <span>${row.collectorName || "No collector assigned"}</span>
+                    <strong>${formatPeso(row.totalAmount)} / ${Number(row.count || 0)} payments</strong>
+                </div>
+            `).join("")}
+        </div>
+    `;
+}
+
+async function loadAdminNotifications() {
+    const wrapper = document.getElementById("adminNotifications");
+    const summary = document.getElementById("notificationSummary");
+    const grid = document.getElementById("notificationGrid");
+
+    try {
+        const response = await fetch("/dashboard/notifications");
+        const result = await response.json();
+
+        if (response.status === 401 || response.status === 403) {
+            wrapper.style.display = "none";
+            return;
+        }
+
+        if (!response.ok) {
+            throw new Error(result.message || "Failed to load notifications");
+        }
+
+        const data = result.data || {};
+
+        document.getElementById("notificationSubText").textContent =
+            `New records since your last Read All. Total new records: ${Number(result.totalNew || 0)}`;
+
+        if (Number(result.totalNew || 0) === 0) {
+            summary.textContent = "No new recorded data right now.";
+        } else {
+            summary.textContent = `You have ${Number(result.totalNew || 0)} new recorded data entries to review.`;
+        }
+
+        grid.innerHTML = [
+            makeNotificationCard("New Remits", data.remits?.count, [
+                { label: "Selected payments", value: formatPeso(data.remits?.totalSelectedPayments) },
+                { label: "Gross total", value: formatPeso(data.remits?.grossTotal) },
+                { label: "Net total", value: formatPeso(data.remits?.netTotal) }
+            ]),
+            makeNotificationCard("New Expenses", data.expenses?.count, [
+                { label: "Total expenses", value: formatPeso(data.expenses?.totalExpense) }
+            ]),
+            makeNotificationCard("New Customers", data.customers?.count, [
+                { label: "New customer records", value: Number(data.customers?.count || 0) }
+            ]),
+            makeNotificationCard("New Payments", data.payments?.count, [
+                { label: "Total payments", value: formatPeso(data.payments?.totalAmount) }
+            ], makePaymentsByCollectorHtml(data.payments?.byCollector)),
+            makeNotificationCard("New Inventory", data.inventory?.count, [
+                { label: "Total quantity", value: Number(data.inventory?.totalQuantity || 0) },
+                { label: "Capital value", value: formatPeso(data.inventory?.totalCapitalValue) },
+                { label: "Selling value", value: formatPeso(data.inventory?.totalSellingValue) }
+            ]),
+            makeNotificationCard("New Collectors", data.collectors?.count, [
+                { label: "New collector records", value: Number(data.collectors?.count || 0) }
+            ]),
+            makeNotificationCard("New Cash Advances", data.cashAdvances?.count, [
+                { label: "Total amount", value: formatPeso(data.cashAdvances?.totalAmount) },
+                { label: "Total remaining", value: formatPeso(data.cashAdvances?.totalRemaining) }
+            ])
+        ].join("");
+
+        grid.style.display = "grid";
+    } catch (error) {
+        console.error("Admin notification error:", error);
+        summary.textContent = "Failed to load admin notifications.";
+        grid.style.display = "none";
+    }
+}
+
+async function readAllNotifications() {
+    const btn = document.getElementById("readAllNotificationsBtn");
+    if (!confirm("Mark all dashboard notifications as read?")) return;
+
+    try {
+        btn.disabled = true;
+        btn.textContent = "Saving...";
+
+        const response = await fetch("/dashboard/notifications/read-all", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" }
+        });
+        const data = await response.json();
+
+        if (!response.ok) {
+            throw new Error(data.message || "Failed to mark notifications as read");
+        }
+
+        await loadAdminNotifications();
+    } catch (error) {
+        console.error("Read all notification error:", error);
+        alert(error.message || "Failed to mark notifications as read.");
+    } finally {
+        btn.disabled = false;
+        btn.textContent = "Read All";
+    }
+}
+
 async function applyPrivileges() {
     try {
         const res = await fetch("/auth/me");
@@ -155,6 +424,12 @@ async function applyPrivileges() {
         }
 
         const user = data.user;
+
+        if (canSeeAdminNotifications(user)) {
+            const notificationBox = document.getElementById("adminNotifications");
+            if (notificationBox) notificationBox.style.display = "block";
+            loadAdminNotifications();
+        }
 
         if (user.role === "admin") return;
 
@@ -189,6 +464,8 @@ document.getElementById("logoutLink").addEventListener("click", async function(e
 
     window.location.href = "/login.html";
 });
+
+document.getElementById("readAllNotificationsBtn").addEventListener("click", readAllNotifications);
 
 loadDashboardSummary();
 loadRecentActivity();
